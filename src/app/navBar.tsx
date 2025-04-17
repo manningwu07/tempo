@@ -1,4 +1,3 @@
-// src/app/navBar.tsx
 "use client";
 import { useState } from "react";
 import { signOut } from "firebase/auth";

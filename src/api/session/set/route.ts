@@ -1,24 +1,22 @@
+// src/app/api/session/set/route.ts
+import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuth } from "firebase-admin/auth";
-import { cookies } from "next/headers";
 
-export async function POST(req: NextRequest) {
-  const { token } = await req.json();
+export async function GET(req: NextRequest) {
+  const token = req.nextUrl.searchParams.get("token");
+  if (!token) return NextResponse.redirect(new URL("/", req.url));
 
   try {
-    // Verify the token with Firebase Admin SDK
-    const decoded = await getAuth().verifyIdToken(token);
-
-    // Set a secure, HTTP-only cookie
+    await getAuth().verifyIdToken(token);
     (await cookies()).set("session", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      maxAge: 60 * 60 * 24 * 5, // 5 days
+      maxAge: 60 * 60 * 24 * 5,
       path: "/",
     });
-
-    return NextResponse.json({ status: "success" });
-  } catch (err) {
-    return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+    return NextResponse.redirect(new URL("/goals", req.url));
+  } catch {
+    return NextResponse.redirect(new URL("/", req.url));
   }
 }

@@ -1,4 +1,4 @@
-// lib/auth.ts
+"use server";
 export async function setSessionCookie(token: string) {
   await fetch("/api/session/set", {
     method: "POST",
