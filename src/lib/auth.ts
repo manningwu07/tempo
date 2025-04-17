@@ -6,3 +6,10 @@ export async function setSessionCookie(token: string) {
     headers: { "Content-Type": "application/json" },
   });
 }
+
+export async function clearSessionCookie() {
+  await fetch("/api/session/clear", {
+    method: "POST",
+    
+  });
+}

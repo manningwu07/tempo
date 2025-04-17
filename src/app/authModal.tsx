@@ -1,4 +1,3 @@
-// src/components/AuthModal.tsx
 "use client";
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -10,8 +9,10 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
   sendEmailVerification,
+  getIdToken,
 } from "firebase/auth";
 import { auth } from "~/lib/firebaseConfigs/firebaseConfig";
+import { setSessionCookie, clearSessionCookie } from "~/lib/auth";
 
 import { Button } from "~/components/ui/button";
 import {
@@ -58,7 +59,6 @@ export default function AuthModal({
   isOpen: boolean;
   onClose: () => void;
 }) {
-
   const [isSignUp, setIsSignUp] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
 
@@ -78,24 +78,25 @@ export default function AuthModal({
         values.password,
       );
 
-      // Sign out immediately after creation
+      // Sign out immediately after creation to prevent abuse
       await auth.signOut();
+      clearSessionCookie();
 
       await sendEmailVerification(userCredential.user);
       setIsVerifying(true);
-        toast.success("Account created!", {
-            position: 'top-center',
+      toast.success("Account created!", {
+        position: "top-center",
         description: "Please check your email to verify your account",
       });
     } catch (error: any) {
       if (error.code === "auth/email-already-in-use") {
-            toast.error("Account already exists", {
-                position: 'top-center',
+        toast.error("Account already exists", {
+          position: "top-center",
           description: "Please sign in instead",
         });
       } else {
-            toast.error("Error creating account", {
-                position: 'top-center',
+        toast.error("Error creating account", {
+          position: "top-center",
           description: error.message,
         });
       }
@@ -112,21 +113,28 @@ export default function AuthModal({
 
       if (!userCredential.user.emailVerified) {
         await auth.signOut(); // Sign out if not verified
+        clearSessionCookie();
+
         toast.error("Email not verified", {
-             position: 'top-center',
+          position: "top-center",
           description: "Please check your email for the verification link",
         });
         return;
       }
-        toast.success("Welcome back!", {
-            position: 'top-center',
-        });
+
+      // set session cookie
+      const token = await getIdToken(userCredential.user, true);
+      await setSessionCookie(token);
+
+      toast.success("Welcome back!", {
+        position: "top-center",
+      });
       onClose();
     } catch (error: any) {
-      const errorCode = error.code; // Retrieve the specific error code
-      let errorMessage = "Sign in failed. Please check your credentials."; // Default error message
+      const errorCode = error.code;
+      let errorMessage =
+        "Sign in failed. Please check your credentials.";
 
-      // Define specific error messages
       const errorMessages: Record<string, string> = {
         "auth/user-not-found": "No account found with this email.",
         "auth/wrong-password": "Invalid password.",
@@ -135,12 +143,11 @@ export default function AuthModal({
           "Invalid email address. Please check your email format.",
       };
 
-      // Override with the specific error message, if available
       if (errorMessages[errorCode]) {
         errorMessage = errorMessages[errorCode];
       }
-        toast.error("Sign in failed", {
-            position: 'top-center',
+      toast.error("Sign in failed", {
+        position: "top-center",
         description: errorMessage,
       });
     }
@@ -149,7 +156,12 @@ export default function AuthModal({
   async function handleGoogleAuth() {
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, provider);
+
+      // set session cookie
+      const token = await getIdToken(result.user, true);
+      await setSessionCookie(token);
+
       toast.success("Welcome!", {
         description: "Successfully signed in with Google",
       });
