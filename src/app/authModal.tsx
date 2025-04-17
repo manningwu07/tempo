@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { use, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -31,6 +31,7 @@ import {
 } from "~/components/ui/form";
 import { Input } from "~/components/ui/input";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 // Form validation schema
 const signUpSchema = z.object({
@@ -61,6 +62,7 @@ export default function AuthModal({
 }) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
+  const router = useRouter();
 
   const form = useForm<z.infer<typeof signUpSchema>>({
     resolver: zodResolver(isSignUp ? signUpSchema : signInSchema),
@@ -129,7 +131,10 @@ export default function AuthModal({
       toast.success("Welcome back!", {
         position: "top-center",
       });
+
+      router.push("/goals");
       onClose();
+
     } catch (error: any) {
       const errorCode = error.code;
       let errorMessage =
@@ -165,6 +170,8 @@ export default function AuthModal({
       toast.success("Welcome!", {
         description: "Successfully signed in with Google",
       });
+      
+      router.push("/goals");
       onClose();
     } catch (error: any) {
       toast.error("Google Sign-in Error", {

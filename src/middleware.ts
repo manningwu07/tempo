@@ -5,7 +5,7 @@ export function middleware(request: NextRequest) {
   const session = request.cookies.get("session")?.value;
   const { pathname } = request.nextUrl;
 
-  const isLoggedIn = !!session; // In production, check session in Firestore
+  const isLoggedIn = !!session;
 
   if (isLoggedIn && pathname === "/") {
     return NextResponse.redirect(new URL("/goals", request.url));
