@@ -24,15 +24,13 @@ Make sure you have the following installed:
 
 1.  Clone the repository:
     ```bash
-    git clone [repository URL]
+    git clone https://github.com/manningwu07/tempo
     cd [project directory]
     ```
 2.  Install dependencies:
 
 ```bash
 npm install
-or
-yarn install
 ```
 
 3.  Configure Firebase:
@@ -53,8 +51,6 @@ FIREBASE_APP_ID=YOUR_APP_ID
 
    ```bash
    npm run dev
-   or
-   yarn dev
    ```
 
     Open your browser and visit http://localhost:3000.
