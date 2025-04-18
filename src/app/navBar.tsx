@@ -19,6 +19,8 @@ import { Brain } from "lucide-react";
 import { clearSessionCookie } from "~/lib/auth";
 
 export function Navbar() {
+  const user = useFirebaseUser();
+
   return (
     <header className="border-b">
       <nav className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -27,17 +29,23 @@ export function Navbar() {
           <span className="text-xl font-semibold">Tempo</span>
         </div>
         <div className="flex items-center space-x-4">
-          <Button variant="ghost">Features</Button>
-          <Button variant="ghost">Pricing</Button>
-          <NavbarAuth />
+          {user ? (
+            // Make this to the toggle between short and longterm goals
+            <div />
+          ) : (
+            <>
+              <Button variant="ghost">Features</Button>
+              <Button variant="ghost">Pricing</Button>
+            </>
+          )}
+          <NavbarAuth user={user} />
         </div>
       </nav>
     </header>
   );
 }
 
-function NavbarAuth() {
-  const user = useFirebaseUser();
+function NavbarAuth({ user }: { user: Auth["currentUser"] }) {
   const [showModal, setShowModal] = useState(false);
 
   if (!user) {
@@ -82,7 +90,9 @@ function NavbarAuth() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem
-          onClick={() => signOutTempo(auth).then(() => window.location.reload())}
+          onClick={() =>
+            signOutTempo(auth).then(() => window.location.reload())
+          }
           className="cursor-pointer text-red-600"
         >
           Log out
@@ -92,9 +102,7 @@ function NavbarAuth() {
   );
 }
 
-
-async function signOutTempo(auth: Auth){
+async function signOutTempo(auth: Auth) {
   await clearSessionCookie();
   signOut(auth);
-
 }

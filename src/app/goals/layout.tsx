@@ -6,10 +6,12 @@
 //   1. Create "no notifications" option for page
 //   2. Calendar, no calendar, cards, no cards. (so notion, google calendar, or both layout/setup)
 
+import { GoalsViewProvider } from "~/context/goalsViewContext";
+
 export default function GoalLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return children
+  return <GoalsViewProvider>{children}</GoalsViewProvider>;
 }
