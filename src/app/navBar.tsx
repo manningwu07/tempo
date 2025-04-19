@@ -114,27 +114,27 @@ function Toggle() {
     <div className="isolate inline-flex rounded-md shadow-sm">
       <Button
         type="button"
-        className={`relative inline-flex items-center rounded-l-md px-4 py-3 text-sm font-semibold ring-1 ring-inset ring-gray-300 focus:z-10 transition-all duration-200 ease-in-out ${
+        className={`relative inline-flex items-center rounded-l-md px-3 py-2 text-sm font-semibold ring-1 ring-inset ring-gray-300 focus:z-10 ${
           view === "short"
-            ? "bg-blue-100 text-blue-800 scale-105 shadow-sm"
+            ? "bg-blue-100 text-blue-800"
             : "bg-white text-gray-900 hover:bg-gray-50"
         }`}
         onClick={() => setView("short")}
-        variant="ghost"
+        variant="ghost" 
       >
-        <CalendarDays className="h-8 w-8" aria-hidden="true" />
+        <CalendarDays className="h-7 w-7" aria-hidden="true" />
       </Button>
       <Button
         type="button"
-        className={`relative -ml-px inline-flex items-center rounded-r-md px-4 py-3 text-sm font-semibold ring-1 ring-inset ring-gray-300 focus:z-10 transition-all duration-200 ease-in-out ${
+        className={`relative -ml-px inline-flex items-center rounded-r-md px-3 py-2 text-sm font-semibold ring-1 ring-inset ring-gray-300 focus:z-10 ${
           view === "long"
-            ? "bg-blue-100 text-blue-800 scale-105 shadow-sm"
+            ? "bg-blue-100 text-blue-800"
             : "bg-white text-gray-900 hover:bg-gray-50"
         }`}
         onClick={() => setView("long")}
-        variant="ghost"
+        variant="ghost" 
       >
-        <CheckCircle className="h-8 w-8" aria-hidden="true" />
+        <CheckCircle className="h-7 w-7" aria-hidden="true" />
       </Button>
     </div>
   );

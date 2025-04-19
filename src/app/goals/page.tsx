@@ -9,7 +9,6 @@ import { Input } from "~/components/ui/input";
 import { ColorPicker, COLORS, type ColorKey } from "~/components/colorPicker";
 import { Plus } from "lucide-react";
 import { Navbar } from "../navBar";
-import { useGoalsView } from "~/context/goalsViewContext";
 
 export default function GoalsPage() {
   const [goals, setGoals] = useState<Goal[]>([]);
