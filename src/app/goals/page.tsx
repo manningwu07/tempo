@@ -79,7 +79,7 @@ export default function GoalsPage() {
                 />
               </div>
               <div className="p-4">
-                <KanbanBoard title={goal.title} initialColumns={goal.columns} />
+                <KanbanBoard initialColumns={goal.columns} />
               </div>
             </div>
           ))}
