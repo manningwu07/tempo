@@ -1,26 +1,28 @@
-"use client";
+'use client'
 
-import { useState } from "react";
-import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import type { Task } from "~/types/kanbanBoard";
-import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
-import { Textarea } from "~/components/ui/textarea";
-import { MoreVertical, Trash2, GripVertical } from "lucide-react";
-import { cn } from "~/lib/utils";
-import { COLORS, type ColorKey } from "~/components/colorPicker";
+import { useState } from 'react'
+import { useSortable } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import type { Task } from '~/types/kanbanBoard'
+import { Button } from '~/components/ui/button'
+import { Input } from '~/components/ui/input'
+import { Textarea } from '~/components/ui/textarea'
+import { MoreVertical, Trash2, GripVertical } from 'lucide-react'
+import { cn } from '~/lib/utils'
+import { COLORS, type ColorKey } from '~/components/colorPicker'
 
+// ... interface TaskCardProps ...
 interface TaskCardProps {
-  task: Task;
-  sortableId: string; // Required for dnd-kit
-  isEditing?: boolean;
-  isOverlay?: boolean; // Style differently when being dragged
-  onEditStart?: () => void;
-  onEditSave?: (updates: Partial<Task>) => void;
-  onEditCancel?: () => void;
-  onDelete?: () => void;
+  task: Task
+  sortableId: string // Required for dnd-kit
+  isEditing?: boolean
+  isOverlay?: boolean // Style differently when being dragged
+  onEditStart?: () => void
+  onEditSave?: (updates: Partial<Task>) => void
+  onEditCancel?: () => void
+  onDelete?: () => void
 }
+
 
 export function TaskCard({
   task,
@@ -32,8 +34,9 @@ export function TaskCard({
   onEditCancel,
   onDelete,
 }: TaskCardProps) {
-  const [editTitle, setEditTitle] = useState(task.title);
-  const [editDesc, setEditDesc] = useState(task.description);
+  // ... state, useSortable, style, bgColor, handlers ...
+  const [editTitle, setEditTitle] = useState(task.title)
+  const [editDesc, setEditDesc] = useState(task.description)
 
   const {
     attributes,
@@ -42,60 +45,62 @@ export function TaskCard({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: sortableId, data: { type: "Task", task } });
+  } = useSortable({ id: sortableId, data: { type: 'Task', task } })
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-  };
+  }
 
-  const bgColor = COLORS[task.color as ColorKey]?.desaturated ?? "#ffffff";
+  const bgColor = COLORS[task.color as ColorKey]?.desaturated ?? '#ffffff'
 
   const handleSave = () => {
-    onEditSave?.({ title: editTitle, description: editDesc });
-  };
+    onEditSave?.({ title: editTitle, description: editDesc })
+  }
 
   const handleCancel = () => {
-    setEditTitle(task.title);
-    setEditDesc(task.description);
-    onEditCancel?.();
-  };
+    setEditTitle(task.title)
+    setEditDesc(task.description)
+    onEditCancel?.()
+  }
+
 
   return (
     <div
       ref={setNodeRef}
       style={{ ...style, backgroundColor: bgColor }}
+      // Add group class here for hover effect on children
       className={cn(
-        'group relative rounded-md border p-2 shadow-sm', 
+        'group relative rounded-md border p-2 shadow-sm',
         isDragging && 'opacity-50',
-        isOverlay && 'shadow-lg' 
+        isOverlay && 'shadow-lg'
       )}
-      {...attributes} 
+      {...attributes} // Spread attributes for a11y
     >
-      {/* Drag Handle */}
+      {/* Drag Handle - Re-add opacity controlled by PARENT hover */}
       <button
         {...listeners}
         className={cn(
-          "focus-visible:ring-primary absolute top-1/2 -left-5 -translate-y-1/2 cursor-grab touch-none rounded p-1 text-gray-400 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2",
-          isOverlay && "cursor-grabbing",
+          'absolute -left-5 top-1/2 -translate-y-1/2 cursor-grab touch-none rounded p-1 text-gray-400 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100', // Reacts to hover on the div above
+          isOverlay && 'cursor-grabbing'
         )}
         aria-label="Drag task"
       >
-        <GripVertical className="h-4 w-4 border-amber-500" />
+        <GripVertical className="h-4 w-4" />
       </button>
 
+      {/* Edit/View Modes */}
       {isEditing ? (
-        // Edit Mode
-        <div className="space-y-2">
+         <div className="space-y-2">
           <Input
             value={editTitle}
-            onChange={(e) => setEditTitle(e.target.value)}
+            onChange={e => setEditTitle(e.target.value)}
             className="bg-white/80 text-sm"
             autoFocus
           />
           <Textarea
             value={editDesc}
-            onChange={(e) => setEditDesc(e.target.value)}
+            onChange={e => setEditDesc(e.target.value)}
             className="bg-white/80 text-sm"
             rows={2}
           />
@@ -109,9 +114,9 @@ export function TaskCard({
           </div>
         </div>
       ) : (
-        // View Mode
         <>
-          <div className="absolute top-1 right-1 flex opacity-0 transition-opacity group-hover:opacity-100">
+          {/* Edit/Delete buttons also use group-hover */}
+          <div className="absolute right-1 top-1 flex opacity-0 transition-opacity group-hover:opacity-100">
             <Button
               size="icon"
               variant="ghost"
@@ -138,5 +143,5 @@ export function TaskCard({
         </>
       )}
     </div>
-  );
+  )
 }
