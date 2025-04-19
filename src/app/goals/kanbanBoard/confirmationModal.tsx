@@ -33,7 +33,7 @@ export function ConfirmationModal({
             <Button variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={onConfirm}> {/* Use destructive variant */}
+            <Button variant="destructive" onClick={onConfirm}>
               Confirm Delete
             </Button>
           </div>
