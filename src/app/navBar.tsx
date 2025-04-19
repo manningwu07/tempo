@@ -13,13 +13,14 @@ import {
 import { Button } from "~/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 import AuthModal from "./authModal";
-
 import useFirebaseUser from "~/hooks/useFirebaseUser";
-import { Brain } from "lucide-react";
+import { Brain, CalendarDays, CheckCircle } from "lucide-react";
 import { clearSessionCookie } from "~/lib/auth";
+import { useGoalsView } from "~/context/goalsViewContext";
 
 export function Navbar() {
   const user = useFirebaseUser();
+  const { view } = useGoalsView();
 
   return (
     <header className="border-b">
@@ -30,8 +31,7 @@ export function Navbar() {
         </div>
         <div className="flex items-center space-x-4">
           {user ? (
-            // Make this to the toggle between short and longterm goals
-            <div />
+            <Toggle />
           ) : (
             <>
               <Button variant="ghost">Features</Button>
@@ -105,4 +105,37 @@ function NavbarAuth({ user }: { user: Auth["currentUser"] }) {
 async function signOutTempo(auth: Auth) {
   await clearSessionCookie();
   signOut(auth);
+}
+
+function Toggle() {
+  const { view, setView } = useGoalsView();
+
+  return (
+    <div className="isolate inline-flex rounded-md shadow-sm">
+      <Button
+        type="button"
+        className={`relative inline-flex items-center rounded-l-md px-4 py-3 text-sm font-semibold ring-1 ring-inset ring-gray-300 focus:z-10 transition-all duration-200 ease-in-out ${
+          view === "short"
+            ? "bg-blue-100 text-blue-800 scale-105 shadow-sm"
+            : "bg-white text-gray-900 hover:bg-gray-50"
+        }`}
+        onClick={() => setView("short")}
+        variant="ghost"
+      >
+        <CalendarDays className="h-8 w-8" aria-hidden="true" />
+      </Button>
+      <Button
+        type="button"
+        className={`relative -ml-px inline-flex items-center rounded-r-md px-4 py-3 text-sm font-semibold ring-1 ring-inset ring-gray-300 focus:z-10 transition-all duration-200 ease-in-out ${
+          view === "long"
+            ? "bg-blue-100 text-blue-800 scale-105 shadow-sm"
+            : "bg-white text-gray-900 hover:bg-gray-50"
+        }`}
+        onClick={() => setView("long")}
+        variant="ghost"
+      >
+        <CheckCircle className="h-8 w-8" aria-hidden="true" />
+      </Button>
+    </div>
+  );
 }

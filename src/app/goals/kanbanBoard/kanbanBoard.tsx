@@ -1,182 +1,186 @@
-// components/KanbanBoard.tsx
-import React, { useState } from 'react'
+'use client'
+
+import { useState } from 'react'
 import {
   DndContext,
-  closestCenter,
-  PointerSensor,
+  DragOverlay,
   useSensor,
   useSensors,
-  type DragEndEvent,
+  MouseSensor,
+  TouchSensor,
+  type UniqueIdentifier,
 } from '@dnd-kit/core'
 import {
   SortableContext,
+  arrayMove,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
-import { useComponentSize } from '~/hooks/useComponentSize'
 import type { Column, Task } from '~/types/kanbanBoard'
-import SortableItem from './sortableItem'
+import { KanbanColumn } from './kanbanColumn'
+import { Button } from '~/components/ui/button'
+import { Plus } from 'lucide-react'
 
-// default columns factory
+// default 3 columns
 export const defaultColumns: Column[] = [
-  { id: 'todo', title: 'To Do', tasks: [], color: 'gray-300' },
-  { id: 'in-progress', title: 'In Progress', tasks: [], color: 'gray-500' },
-  { id: 'done', title: 'Done', tasks: [], color: 'gray-700' },
+  { id: 'todo', title: 'To Do', color: 'gray', tasks: [] },
+  { id: 'in-progress', title: 'In Progress', color: 'gray', tasks: [] },
+  { id: 'done', title: 'Done', color: 'gray', tasks: [] },
 ]
 
-type Props = {
+interface Props {
   title: string
   initialColumns?: Column[]
 }
 
-export default function KanbanBoard({ title, initialColumns }: Props) {
+export function KanbanBoard({ initialColumns }: Props) {
   const [columns, setColumns] = useState<Column[]>(
     initialColumns ?? defaultColumns
   )
+  const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null)
 
-  // track which column is showing the "add task" form
-  const [addingTaskFor, setAddingTaskFor] = useState<string | null>(null)
-  const [taskForm, setTaskForm] = useState<{ title: string; description: string }>({
-    title: '',
-    description: '',
-  })
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } })
+  )
 
-  // component‐width‐aware layout
-  const { ref, width } = useComponentSize<HTMLDivElement>()
-  const colsToShow = width < 400 ? 1 : width < 800 ? 2 : columns.length
+  function handleDragEnd({ active, over }: any) {
+    if (!over) return
+    const [fromCol, fromIdx] = active.id.split('|')
+    const [toCol, toIdx] = over.id.split('|')
+    if (fromCol === toCol) {
+      setColumns(cols =>
+        cols.map(col =>
+          col.id === fromCol
+            ? { ...col, tasks: arrayMove(col.tasks, +fromIdx, +toIdx) }
+            : col
+        )
+      )
+    } else {
+      let moved: Task
+      setColumns(cols =>
+        cols.map(col => {
+          if (col.id === fromCol) {
+            moved = col.tasks[+fromIdx]!
+            return {
+              ...col,
+              tasks: col.tasks.filter((_, i) => i !== +fromIdx),
+            }
+          }
+          if (col.id === toCol) {
+            const newTasks = [...col.tasks]
+            newTasks.splice(+toIdx, 0, moved!)
+            return { ...col, tasks: newTasks }
+          }
+          return col
+        })
+      )
+    }
+    setActiveId(null)
+  }
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
-
-  function handleDragEnd(e: DragEndEvent) {
-    const { active, over } = e
-    if (!over || active.id === over.id) return
-
-    const [fromCol, fromIdx] = (active.id as string).split('|')
-    const [toCol, toIdx] = (over.id as string).split('|')
-    let moved: Task | undefined
-
+  const handleColumnColor = (columnId: string, colorKey: string) => {
     setColumns(cols =>
-      cols.map(col => {
-        if (col.id === fromCol) {
-          moved = col.tasks[+fromIdx!]
-          return { ...col, tasks: col.tasks.filter((_, i) => i !== +fromIdx!) }
-        }
-        if (col.id === toCol && moved) {
-          const newTasks = [...col.tasks]
-          newTasks.splice(+toIdx!, 0, moved)
-          return { ...col, tasks: newTasks }
-        }
-        return col
-      })
+      cols.map(col =>
+        col.id === columnId ? { ...col, color: colorKey } : col
+      )
     )
   }
 
-  function handleAddTask(colId: string) {
-    if (!taskForm.title.trim()) return
+  const handleAddTask = (columnId: string, task: Task) => {
     setColumns(cols =>
       cols.map(col =>
-        col.id === colId
+        col.id === columnId
+          ? { ...col, tasks: [...col.tasks, task] }
+          : col
+      )
+    )
+  }
+
+  const handleEditTask = (
+    columnId: string,
+    idx: number,
+    updates: Partial<Task>
+  ) => {
+    setColumns(cols =>
+      cols.map(col =>
+        col.id === columnId
           ? {
               ...col,
-              tasks: [
-                ...col.tasks,
-                { ...taskForm, color: col.color },
-              ],
+              tasks: col.tasks.map((t, i) =>
+                i === idx ? { ...t, ...updates } : t
+              ),
             }
           : col
       )
     )
-    setAddingTaskFor(null)
-    setTaskForm({ title: '', description: '' })
+  }
+
+  const handleDeleteTask = (columnId: string, idx: number) => {
+    setColumns(cols =>
+      cols.map(col =>
+        col.id === columnId
+          ? { ...col, tasks: col.tasks.filter((_, i) => i !== idx) }
+          : col
+      )
+    )
   }
 
   return (
-    <div className="p-4 bg-white rounded shadow" ref={ref}>
-      <h2 className="text-xl font-bold mb-4">{title}</h2>
-      <div
-        className="flex gap-4 overflow-x-auto"
-        style={{ flexWrap: colsToShow < columns.length ? 'nowrap' : 'wrap' }}
+    <div className="flex flex-col gap-4 rounded bg-white p-4 shadow">
+      <DndContext
+        sensors={sensors}
+        onDragEnd={handleDragEnd}
+        onDragStart={({ active }) => setActiveId(active.id)}
       >
-        {columns.map(col => (
-          <div
-            key={col.id}
-            className="bg-gray-50 rounded p-2 flex-shrink-0"
-            style={{ width: `${100 / colsToShow}%`, minWidth: 250 }}
+        <div className="flex gap-4 overflow-x-auto">
+          <SortableContext
+            items={columns.flatMap(col =>
+              col.tasks.map((_, i) => `${col.id}|${i}`)
+            )}
+            strategy={verticalListSortingStrategy}
           >
-            <h3 className={`font-semibold mb-2 text-${col.color}`}>{col.title}</h3>
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleDragEnd}
-            >
-              <SortableContext
-                items={col.tasks.map((_, i) => `${col.id}|${i}`)}
-                strategy={verticalListSortingStrategy}
-              >
-                {col.tasks.map((task, i) => (
-                  <SortableItem
-                    key={`${col.id}|${i}`}
-                    id={`${col.id}|${i}`}
-                    task={task}
-                    color={col.color}
-                  />
-                ))}
-              </SortableContext>
-            </DndContext>
+            {columns.map(col => (
+              <KanbanColumn
+                key={col.id}
+                column={col}
+                onColorChange={handleColumnColor}
+                onAddTask={handleAddTask}
+                onEditTask={handleEditTask}
+                onDeleteTask={handleDeleteTask}
+              />
+            ))}
+          </SortableContext>
 
-            {/* Add Task UI */}
-            <div className="mt-2">
-              {addingTaskFor === col.id ? (
-                <form
-                  onSubmit={e => {
-                    e.preventDefault()
-                    handleAddTask(col.id)
-                  }}
-                  className="space-y-1"
-                >
-                  <input
-                    className="w-full px-2 py-1 border rounded"
-                    placeholder="Title"
-                    value={taskForm.title}
-                    onChange={e =>
-                      setTaskForm(f => ({ ...f, title: e.target.value }))
-                    }
-                  />
-                  <input
-                    className="w-full px-2 py-1 border rounded"
-                    placeholder="Description"
-                    value={taskForm.description}
-                    onChange={e =>
-                      setTaskForm(f => ({ ...f, description: e.target.value }))
-                    }
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      type="submit"
-                      className="px-3 py-1 bg-blue-600 text-white rounded"
-                    >
-                      Add
-                    </button>
-                    <button
-                      type="button"
-                      className="px-3 py-1 border rounded"
-                      onClick={() => setAddingTaskFor(null)}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                <button
-                  className="text-sm text-blue-600 hover:underline"
-                  onClick={() => setAddingTaskFor(col.id)}
-                >
-                  + Add Task
-                </button>
-              )}
+          <Button
+            variant="outline"
+            className="flex-shrink-0 border-dashed"
+            onClick={() =>
+              setColumns(cols => [
+                ...cols,
+                {
+                  id: `col-${Date.now()}`,
+                  title: 'New Column',
+                  color: 'gray',
+                  tasks: [],
+                },
+              ])
+            }
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add Column
+          </Button>
+        </div>
+
+        <DragOverlay>
+          {/* Optional: render a drag preview */}
+          {activeId ? (
+            <div className="rounded bg-white p-2 shadow-lg">
+              {/* you could lookup active task text here */}
+              Dragging…
             </div>
-          </div>
-        ))}
-      </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
     </div>
   )
 }
