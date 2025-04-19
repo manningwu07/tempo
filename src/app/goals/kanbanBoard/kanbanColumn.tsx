@@ -10,7 +10,7 @@ import type { Column, Task } from '~/types/kanbanBoard'
 import { Button } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'
 import { Textarea } from '~/components/ui/textarea'
-import { Plus, Trash2 } from 'lucide-react' // Add Trash2
+import { Plus, Trash2 } from 'lucide-react'
 import { ColorPicker, COLORS, type ColorKey } from '~/components/colorPicker'
 import { TaskCard } from './taskCard'
 import { cn } from '~/lib/utils'
@@ -24,8 +24,9 @@ type Props = {
     taskIndex: number,
     updates: Partial<Task>
   ) => void
-  onDeleteTask: (columnId: string, taskIndex: number) => void // Keep this if TaskCard needs it
-  onDeleteRequest: (columnId: string) => void // Handler to request deletion
+  onDeleteTask: (columnId: string, taskIndex: number) => void
+  onDeleteRequest: (columnId: string) => void
+  onRenameColumn: (columnId: string, newTitle: string) => void
 }
 
 export function KanbanColumn({
@@ -33,14 +34,24 @@ export function KanbanColumn({
   onColorChange,
   onAddTask,
   onEditTask,
-  onDeleteTask, // Keep receiving even if unused here
-  onDeleteRequest, // Receive handler
+  onDeleteTask,
+  onDeleteRequest,
+  onRenameColumn,
 }: Props) {
-  
   const [isAdding, setIsAdding] = useState(false)
   const [newTask, setNewTask] = useState({ title: '', description: '' })
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
+
+  // NEW: title‐edit state
+  const [isEditingTitle, setIsEditingTitle] = useState(false)
+  const [editTitle, setEditTitle] = useState(column.title)
   const titleInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (isEditingTitle) {
+      titleInputRef.current?.focus()
+    }
+  }, [isEditingTitle])
 
   const { setNodeRef: setDroppableNodeRef, isOver } = useDroppable({
     id: column.id,
@@ -48,13 +59,8 @@ export function KanbanColumn({
   })
 
   const taskIds = column.tasks.map((_, idx) => `${column.id}|${idx}`)
-  const columnBgColor = COLORS[column.color as ColorKey]?.desaturated ?? '#f3f4f6'
-
-  useEffect(() => {
-    if (isAdding) {
-      titleInputRef.current?.focus()
-    }
-  }, [isAdding])
+  const columnBgColor =
+    COLORS[column.color as ColorKey]?.desaturated ?? '#f3f4f6'
 
   const submitNewTask = () => {
     if (!newTask.title.trim()) {
@@ -66,7 +72,7 @@ export function KanbanColumn({
     setIsAdding(false)
   }
 
-  const handleKeyDown = (
+  const handleTaskKeyDown = (
     event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -78,31 +84,61 @@ export function KanbanColumn({
     }
   }
 
-
   return (
     <div
       ref={setDroppableNodeRef}
       className={cn(
-        'flex h-full flex-none flex-col gap-3 rounded-lg bg-gray-100 p-3 shadow-sm transition-colors duration-200',
+        'flex h-full flex-none flex-col gap-3 rounded-lg p-3 shadow-sm transition-colors duration-200',
         'basis-[280px]',
-        isOver && 'bg-gray-200'
+        isOver ? 'bg-gray-200' : 'bg-gray-100'
       )}
     >
       {/* Column Header */}
       <div className="flex items-center justify-between px-1">
-        <h3 className="text-base font-semibold">{column.title}</h3>
-        <div className="flex items-center gap-1"> {/* Group buttons */}
+        {isEditingTitle ? (
+          <Input
+            ref={titleInputRef}
+            value={editTitle}
+            className="h-6 text-sm"
+            onChange={(e) => setEditTitle(e.target.value)}
+            onBlur={() => {
+              if (editTitle.trim()) {
+                onRenameColumn(column.id, editTitle.trim())
+              }
+              setIsEditingTitle(false)
+              setEditTitle(column.title)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && editTitle.trim()) {
+                onRenameColumn(column.id, editTitle.trim())
+                setIsEditingTitle(false)
+              } else if (e.key === 'Escape') {
+                setIsEditingTitle(false)
+                setEditTitle(column.title)
+              }
+            }}
+          />
+        ) : (
+          <h3
+            className="text-base font-semibold cursor-pointer hover:text-blue-600"
+            title="Click to rename column"
+            onClick={() => setIsEditingTitle(true)}
+          >
+            {column.title}
+          </h3>
+        )}
+
+        <div className="flex items-center gap-1">
           <ColorPicker
             variant="desaturated"
             value={column.color as ColorKey}
-            onChange={colorKey => onColorChange(column.id, colorKey)}
+            onChange={(c) => onColorChange(column.id, c)}
           />
-          {/* Delete Column Button */}
           <Button
             variant="ghost"
             size="icon"
             className="h-8 w-8 text-gray-500 hover:bg-red-100 hover:text-red-600"
-            onClick={() => onDeleteRequest(column.id)} // Call request handler
+            onClick={() => onDeleteRequest(column.id)}
             aria-label="Delete column"
           >
             <Trash2 className="h-4 w-4" />
@@ -111,20 +147,22 @@ export function KanbanColumn({
       </div>
 
       {/* Task List */}
-      <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
-         <div className="flex-1 space-y-2 overflow-y-auto px-1 py-1 min-h-[50px]">
+      <SortableContext
+        items={taskIds}
+        strategy={verticalListSortingStrategy}
+      >
+        <div className="flex-1 space-y-2 overflow-y-auto px-1 py-1 min-h-[50px]">
           {column.tasks.map((task, idx) => (
             <TaskCard
               key={`${column.id}|${idx}`}
               task={task}
               isEditing={editingIndex === idx}
               onEditStart={() => setEditingIndex(idx)}
-              onEditSave={updates => {
+              onEditSave={(updates) => {
                 onEditTask(column.id, idx, updates)
                 setEditingIndex(null)
               }}
               onEditCancel={() => setEditingIndex(null)}
-              // Pass task delete handler down if TaskCard implements it
               onDelete={() => onDeleteTask(column.id, idx)}
               sortableId={`${column.id}|${idx}`}
             />
@@ -134,7 +172,7 @@ export function KanbanColumn({
 
       {/* Add Task Section */}
       {isAdding ? (
-         <div
+        <div
           className="space-y-2 rounded-md border bg-white p-2 shadow"
           style={{ backgroundColor: columnBgColor }}
         >
@@ -142,19 +180,19 @@ export function KanbanColumn({
             ref={titleInputRef}
             placeholder="Task title"
             value={newTask.title}
-            onChange={e =>
-              setNewTask(t => ({ ...t, title: e.target.value }))
+            onChange={(e) =>
+              setNewTask((t) => ({ ...t, title: e.target.value }))
             }
-            onKeyDown={handleKeyDown}
+            onKeyDown={handleTaskKeyDown}
             className="bg-white/80"
           />
           <Textarea
             placeholder="Description (optional)"
             value={newTask.description}
-            onChange={e =>
-              setNewTask(t => ({ ...t, description: e.target.value }))
+            onChange={(e) =>
+              setNewTask((t) => ({ ...t, description: e.target.value }))
             }
-            onKeyDown={handleKeyDown}
+            onKeyDown={handleTaskKeyDown}
             className="bg-white/80"
             rows={2}
           />
