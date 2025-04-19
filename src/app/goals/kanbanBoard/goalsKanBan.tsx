@@ -25,9 +25,15 @@ import { Input } from "~/components/ui/input";
 import { ColorPicker, COLORS, type ColorKey } from "~/components/colorPicker";
 import { Plus } from "lucide-react";
 import { ConfirmationModal } from "./confirmationModal";
-import { loadGoalsFromDB, saveGoalsToDB } from "~/lib/indexedDB";
+import {
+  loadGoalsFromDB,
+  saveGoal,
+  deleteGoalDB,
+  saveGoalOrder,
+} from "~/lib/indexedDB"
 import { defaultColumns } from "./kanbanBoard";
 import { GoalItem } from "./goalPath";
+import { useDebouncedCallback } from "use-debounce";
 
 const MAX_GOALS = 10;
 const SAVE_DEBOUNCE_MS = 750;
@@ -53,116 +59,187 @@ export function GoalsKanbanView() {
 
   // --- Effect for Initial Loading ---
   useEffect(() => {
-    let isMounted = true;
+    let isMounted = true
     async function loadData() {
-      console.log("Attempting to load goals from DB...");
-      const loadedGoals = await loadGoalsFromDB();
-      if (isMounted) {
-        setGoals(loadedGoals);
-        setIsLoading(false);
-        console.log("Finished loading goals.");
-        setTimeout(() => {
-          isInitialLoad.current = false;
-        }, 0);
+      console.log("Attempting to load goals from DB...")
+      try {
+        const loadedGoals = await loadGoalsFromDB()
+        if (isMounted) {
+          setGoals(loadedGoals)
+          console.log("Finished loading goals.", loadedGoals)
+        }
+      } catch (error) {
+        console.error("Failed to load goals:", error)
+        // Handle error state if needed
+      } finally {
+        if (isMounted) {
+          setIsLoading(false)
+        }
       }
     }
-    loadData();
+    loadData()
     return () => {
-      isMounted = false;
-    };
-  }, []);
+      isMounted = false
+    }
+  }, [])
 
   // --- Effect for Saving Changes (Debounced) ---
-  useEffect(() => {
-    if (isLoading || isInitialLoad.current) {
-      return;
+  const debouncedSaveGoal = useDebouncedCallback(async (goal: Goal) => {
+    console.log(`Debounced save for goal ${goal.id}`)
+    try {
+      await saveGoal(goal)
+    } catch (error) {
+      console.error(`Failed to save goal ${goal.id}:`, error)
+      // Handle save error (e.g., show notification)
     }
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
+  }, SAVE_DEBOUNCE_MS)
+
+  // Debounce saving goal order changes
+  const debouncedSaveOrder = useDebouncedCallback(async (orderedIds: string[]) => {
+    console.log("Debounced save for goal order")
+    try {
+      await saveGoalOrder(orderedIds)
+    } catch (error) {
+      console.error("Failed to save goal order:", error)
+      // Handle save error
     }
-    console.log("Goal state changed, scheduling save...");
-    saveTimeoutRef.current = setTimeout(() => {
-      console.log("Debounce timer elapsed, saving goals...");
-      saveGoalsToDB(goals);
-    }, SAVE_DEBOUNCE_MS);
-    return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-    };
-  }, [goals, isLoading]);
+  }, SAVE_DEBOUNCE_MS)
 
   // --- All handlers now live here ---
-  const addGoal = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTitle.trim() || !canAddGoal) return;
-    setGoals((gs) => [
-      ...gs,
-      {
-        id: uuidv4(),
-        title: newTitle.trim(),
-        color: newColor,
-        columns: defaultColumns,
-      },
-    ]);
-    setNewTitle("");
-    setNewColor("gray");
-  };
 
+ // --- Handlers calling specific DB functions ---
+ const addGoal = async (e: React.FormEvent) => {
+  e.preventDefault()
+  if (!newTitle.trim() || !canAddGoal) return
+
+  const newGoal: Goal = {
+    id: uuidv4(),
+    title: newTitle.trim(),
+    color: newColor,
+    columns: defaultColumns, // Use your default structure
+  }
+
+  const newGoals = [...goals, newGoal]
+  setGoals(newGoals) // Update state first for UI responsiveness
+
+  try {
+    await saveGoal(newGoal) // Save the new goal immediately
+    await saveGoalOrder(newGoals.map((g) => g.id)) // Update the order immediately
+    console.log(`Goal ${newGoal.id} added and order saved.`)
+  } catch (error) {
+    console.error("Failed to save new goal or order:", error)
+    // Optionally revert state or show error
+  }
+
+  setNewTitle("")
+  setNewColor("gray")
+}
+
+// Called when columns within a goal change (tasks added/moved/edited, column renamed etc.)
+const updateGoalColumns = (goalId: string, newColumns: Column[]) => {
+  let updatedGoal: Goal | undefined
+  setGoals((currentGoals) =>
+    currentGoals.map((goal) => {
+      if (goal.id === goalId) {
+        updatedGoal = { ...goal, columns: newColumns }
+        return updatedGoal
+      }
+      return goal
+    })
+  )
+
+  // Debounce the save for this specific goal
+  if (updatedGoal) {
+    debouncedSaveGoal(updatedGoal)
+  }
+}
+
+// Called when a goal's top-level properties (title, color) change
+const updateGoalDetails = (
+  goalId: string,
+  updates: Partial<Pick<Goal, "title" | "color">>
+) => {
+  let updatedGoal: Goal | undefined
+  setGoals((gs) =>
+    gs.map((g) => {
+      if (g.id === goalId) {
+        updatedGoal = { ...g, ...updates }
+        return updatedGoal
+      }
+      return g
+    })
+  )
+  if (updatedGoal) {
+    debouncedSaveGoal(updatedGoal) // Debounce save
+  }
+}
+
+// --- Goal Edit Handlers ---
+const handleStartEditGoal = (id: string) => setEditingGoalId(id)
+const handleCancelEditGoal = () => setEditingGoalId(null)
+const handleSaveEditGoal = (id: string, newTitle: string) => {
+  updateGoalDetails(id, { title: newTitle }) // Use the generalized update function
+  setEditingGoalId(null)
+}
+const updateGoalColorHandler = (id: string, colorKey: ColorKey) => {
+  updateGoalDetails(id, { color: colorKey }) // Use the generalized update function
+}
+
+// --- Goal Delete Handlers ---
+const handleDeleteGoalRequest = (id: string) => {
+  setDeletingGoalId(id)
+  setIsDeleteModalOpen(true)
+}
+const handleCancelDeleteGoal = () => {
+  setIsDeleteModalOpen(false)
+  setDeletingGoalId(null)
+}
+const handleConfirmDeleteGoal = async () => {
+  if (!deletingGoalId) return
+
+  const goalToDeleteId = deletingGoalId
+  const newGoals = goals.filter((g) => g.id !== goalToDeleteId)
+
+  setGoals(newGoals) // Update state first
+  handleCancelDeleteGoal() // Close modal
+
+  try {
+    await deleteGoalDB(goalToDeleteId) // Delete from DB immediately
+    await saveGoalOrder(newGoals.map((g) => g.id)) // Update order immediately
+    console.log(`Goal ${goalToDeleteId} deleted and order saved.`)
+  } catch (error) {
+    console.error("Failed to delete goal or save order:", error)
+    // Optionally revert state or show error
+  }
+}
+
+// --- Goal Drag Handlers ---
+const handleGoalDragStart = (event: DragStartEvent) => {
+  const { active } = event
+  const goal = goals.find((g) => g.id === active.id)
+  if (goal) setActiveGoal(goal)
+}
+const handleGoalDragEnd = (event: DragEndEvent) => {
+  const { active, over } = event
+  setActiveGoal(null)
+
+  if (over && active.id !== over.id) {
+    const oldIndex = goals.findIndex((item) => item.id === active.id)
+    const newIndex = goals.findIndex((item) => item.id === over.id)
+
+    if (oldIndex !== -1 && newIndex !== -1) {
+      const newOrderedGoals = arrayMove(goals, oldIndex, newIndex)
+      setGoals(newOrderedGoals) // Update state immediately
+
+      // Debounce saving the new order
+      debouncedSaveOrder(newOrderedGoals.map((g) => g.id))
+    }
+  }
+}
   const updateGoalColor = (id: string, colorKey: ColorKey) => {
     setGoals((gs) =>
       gs.map((g) => (g.id === id ? { ...g, color: colorKey } : g)),
     );
-  };
-
-  const updateGoalColumns = (goalId: string, newColumns: Column[]) => {
-    setGoals((currentGoals) =>
-      currentGoals.map((goal) =>
-        goal.id === goalId ? { ...goal, columns: newColumns } : goal,
-      ),
-    );
-  };
-
-  const handleStartEditGoal = (id: string) => setEditingGoalId(id);
-  const handleCancelEditGoal = () => setEditingGoalId(null);
-  const handleSaveEditGoal = (id: string, newTitle: string) => {
-    setGoals((gs) =>
-      gs.map((g) => (g.id === id ? { ...g, title: newTitle } : g)),
-    );
-    setEditingGoalId(null);
-  };
-
-  const handleDeleteGoalRequest = (id: string) => {
-    setDeletingGoalId(id);
-    setIsDeleteModalOpen(true);
-  };
-  const handleCancelDeleteGoal = () => {
-    setIsDeleteModalOpen(false);
-    setDeletingGoalId(null);
-  };
-  const handleConfirmDeleteGoal = () => {
-    if (deletingGoalId) {
-      setGoals((gs) => gs.filter((g) => g.id !== deletingGoalId));
-    }
-    handleCancelDeleteGoal();
-  };
-
-  const handleGoalDragStart = (event: DragStartEvent) => {
-    const { active } = event;
-    const goal = goals.find((g) => g.id === active.id);
-    if (goal) setActiveGoal(goal);
-  };
-  const handleGoalDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    setActiveGoal(null);
-    if (over && active.id !== over.id) {
-      setGoals((items) => {
-        const oldIndex = items.findIndex((item) => item.id === active.id);
-        const newIndex = items.findIndex((item) => item.id === over.id);
-        if (oldIndex === -1 || newIndex === -1) return items;
-        return arrayMove(items, oldIndex, newIndex);
-      });
-    }
   };
 
   // --- Render Logic ---
