@@ -5,6 +5,7 @@ import { Navbar } from "../navBar";
 import type { CalendarEvent } from "./calendar/calendarView";
 import { GoalsKanbanView } from "./kanbanBoard/goalsKanBan";
 import CalendarView from "./calendar/calendarView";
+import { KanbanSlider } from "./kanbanBoard/kanbanSlider";
 
 export default function GoalsPage() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -21,8 +22,7 @@ export default function GoalsPage() {
   };
 
   const handleEdit = (evt: CalendarEvent) => {
-    // open modal → update title/desc/dates/goal/task/type → then:
-    // setEvents(ev => ev.map(e => e.id===evt.id ? updatedEvt : e))
+    // Modal logic here
   };
 
   const handleDelete = (id: string) => {
@@ -30,11 +30,19 @@ export default function GoalsPage() {
   };
 
   return (
-    <>
+    <div className="flex h-screen flex-col bg-white">
       <Navbar />
-      <div className="min-h-screen bg-gray-100 p-6">
-        <div style={{ display: "flex" }}>
-          {/* <GoalsKanbanView /> */}
+      
+      <main className="flex flex-1 overflow-hidden">
+        {/* Left Sidebar with Goals */}
+        <KanbanSlider className="border-r">
+          <div className="h-full overflow-y-auto p-4">
+            <GoalsKanbanView />
+          </div>
+        </KanbanSlider>
+
+        {/* Calendar Main Area */}
+        <div className="flex-1 overflow-hidden">
           <CalendarView
             events={events}
             onCreate={handleCreate}
@@ -42,7 +50,7 @@ export default function GoalsPage() {
             onDelete={handleDelete}
           />
         </div>
-      </div>
-    </>
+      </main>
+    </div>
   );
 }

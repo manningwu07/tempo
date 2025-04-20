@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import React, { useState, useRef } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '~/lib/utils'
 
@@ -10,24 +10,26 @@ type Props = {
 }
 
 export function KanbanSlider({ children, className }: Props) {
+  // We'll control the sidebar in pixels instead of % – more predictable.
+  const [width, setWidth] = useState(350)       // default 300px
   const [isCollapsed, setIsCollapsed] = useState(false)
-  const [width, setWidth] = useState(50) // default 50% width
-  const sliderRef = useRef<HTMLDivElement>(null)
   const isDragging = useRef(false)
+  const containerRef = useRef<HTMLDivElement>(null)
 
-  const handleMouseDown = () => {
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault()
     isDragging.current = true
     document.addEventListener('mousemove', handleMouseMove)
     document.addEventListener('mouseup', handleMouseUp)
   }
 
   const handleMouseMove = (e: MouseEvent) => {
-    if (!isDragging.current || !sliderRef.current) return
-    const container = sliderRef.current.parentElement
-    if (!container) return
-
-    const newWidth = (e.clientX / container.offsetWidth) * 100
-    setWidth(Math.min(Math.max(newWidth, 20), 80)) // Limit between 20% and 80%
+    if (!isDragging.current || !containerRef.current) return
+    const rect = containerRef.current.getBoundingClientRect()
+    // new width is pointer X relative to container's left
+    const newW = e.clientX - rect.left
+    // clamp between 200px and 600px
+    setWidth(Math.min(Math.max(newW, 300), 700))
   }
 
   const handleMouseUp = () => {
@@ -37,29 +39,28 @@ export function KanbanSlider({ children, className }: Props) {
   }
 
   return (
-    <div className="relative flex h-full w-full">
-      <div
-        ref={sliderRef}
-        style={{ width: `${isCollapsed ? 0 : width}%` }}
-        className={cn(
-          'transition-[width] duration-300 ease-in-out',
-          isCollapsed ? 'w-0' : '',
-          className
-        )}
-      >
-        {children}
-      </div>
+    <div
+      ref={containerRef}
+      className={cn('relative flex h-full', className)}
+      style={{ width: isCollapsed ? 0 : width }}
+    >
+      {/* Your kanban sidebar */}
+      <div className="overflow-hidden h-full">{children}</div>
 
-      {/* Slider Handle */}
-      <div
-        className="absolute right-0 top-0 h-full w-1 cursor-col-resize bg-gray-200 hover:bg-primary/50"
-        onMouseDown={handleMouseDown}
-      />
+      {/* Drag‐handle */}
+      {!isCollapsed && (
+        <div
+          className="w-1 cursor-col-resize bg-gray-200 hover:bg-gray-300"
+          onMouseDown={handleMouseDown}
+        />
+      )}
 
-      {/* Toggle Button */}
+      {/* Collapse/Expand button */}
       <button
-        onClick={() => setIsCollapsed(!isCollapsed)}
-        className="absolute -right-6 top-1/2 z-10 -translate-y-1/2 rounded-full bg-primary p-1 text-white shadow-lg"
+        onClick={() => setIsCollapsed((c) => !c)}
+        className="absolute top-4 right-0 transform translate-x-1/2 
+                   bg-primary text-white rounded-full p-1 shadow"
+        aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
       >
         {isCollapsed ? (
           <ChevronRight className="h-4 w-4" />
