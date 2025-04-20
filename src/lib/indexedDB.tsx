@@ -2,7 +2,7 @@
 import type { Goal } from "~/types/kanbanBoard"
 
 const DB_NAME = "TempoGoalsDB"
-const DB_VERSION = 2 // Increment version if schema changes
+const DB_VERSION = 3
 const GOALS_STORE_NAME = "goals"
 const META_STORE_NAME = "meta"
 const GOAL_ORDER_KEY = "goalOrder"
@@ -160,6 +160,3 @@ export async function saveGoalOrder(order: string[]): Promise<void> {
     }
   })
 }
-
-// Remove the old global save function if it exists
-// export async function saveGoalsToDB(goals: Goal[]): Promise<void> { ... } // DELETE THIS
