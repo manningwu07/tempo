@@ -10,7 +10,7 @@ import { KanbanSlider } from "./kanbanBoard/kanbanSlider";
 export default function GoalsPage() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
 
-  const handleCreate = (start: any, end: any) => {
+  const handleCreate = (start: Date, end: Date, dayIndex: number) => {
     const newEvt: CalendarEvent = {
       id: Date.now().toString(),
       title: "New Event",
