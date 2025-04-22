@@ -5,32 +5,50 @@ import { Navbar } from "../navBar";
 import type { CalendarEvent } from "./calendar/calendarView";
 import { GoalsKanbanView } from "./kanbanBoard/goalsKanBan";
 import CalendarView from "./calendar/calendarView";
-import { KanbanSlider } from "./kanbanBoard/kanbanSlider";
-import MiniMonthCalendar from "./calendar/miniMonthCalendar";
+import { KanbanSlider, SliderDirection } from "./kanbanBoard/kanbanSlider";
+import { MiniCalendar } from "./calendar/miniMonthCalendar";
+import { cn } from "~/lib/utils";
+import { ChevronDown, ChevronUp } from "lucide-react";
+import { Button } from "~/components/ui/button"; // Assuming you use shadcn/ui Button
 
 export default function GoalsPage() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [leftCollapsed, setLeftCollapsed] = useState(false);
-  const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [isKanbanCollapsed, setIsKanbanCollapsed] = useState(false);
+  const [isCalendarCollapsed, setIsCalendarCollapsed] = useState(false);
+  const [isMiniCalendarVisible, setIsMiniCalendarVisible] = useState(true); // New state
 
-  // Handle panel collapse state changes
+  // Handle Keyboard Shortcuts centrally
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === 'e') {
+      // Ctrl/Cmd + E: Toggle Kanban (Left Panel)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
         e.preventDefault();
-        setLeftCollapsed(prev => !prev);
+        setIsKanbanCollapsed((prev) => !prev);
       }
       
-      if (e.ctrlKey && e.key === 'f') {
+      // Ctrl/Cmd + G: Toggle Calendar (Right Panel)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'g') {
         e.preventDefault();
-        setRightCollapsed(prev => !prev);
+        setIsCalendarCollapsed((prev) => !prev);
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsMiniCalendarVisible((prev) => !prev);
       }
     };
-    
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []); // Empty dependency array ensures this runs once
+
+  // Update page title to reflect state - optional
+  useEffect(() => {
+    document.title = `Goals ${isKanbanCollapsed ? '(K)' : ''} ${isCalendarCollapsed ? '(C)' : ''}`;
+  }, [isKanbanCollapsed, isCalendarCollapsed]);
 
   const handleCreate = (start: Date, end: Date, dayIndex: number) => {
     const newEvt: CalendarEvent = {
@@ -45,16 +63,18 @@ export default function GoalsPage() {
 
   const handleEdit = (evt: CalendarEvent) => {
     // Modal logic here
-    console.log("Edit event:", evt);
   };
 
   const handleDelete = (id: string) => {
     setEvents((ev) => ev.filter((e) => e.id !== id));
   };
 
-  const handleDateSelect = (date: Date) => {
+  const handleDateChange = (date: Date) => {
     setSelectedDate(date);
-    // You could also scroll the calendar to that date
+    // If calendar is collapsed, expand it when a date is clicked? Optional UX choice.
+    // if (isCalendarCollapsed) {
+    //   setIsCalendarCollapsed(false);
+    // }
   };
 
   return (
@@ -62,20 +82,43 @@ export default function GoalsPage() {
       <Navbar />
       
       <main className="flex flex-1 overflow-hidden">
-        {/* Left Kanban Panel */}
+        {/* Left Sidebar with Goals and Mini Calendar */}
         <KanbanSlider 
           className="border-r" 
-          side="left"
-          otherPanelCollapsed={rightCollapsed}
+          direction={SliderDirection.Left}
+          isCollapsed={isKanbanCollapsed}
+          isCalendarCollapsed={isCalendarCollapsed}
         >
-          <div className="h-full flex flex-col">
-            {/* Mini Calendar at the top */}
-            <div className="p-4 border-b">
-              <MiniMonthCalendar 
-                currentDate={selectedDate}
-                onDateSelect={handleDateSelect}
-              />
-            </div>
+          <div className="flex h-full flex-col">
+            {/* Mini Calendar Section - Conditionally render based on main calendar visibility */}
+            
+              <div className={cn(
+                "transition-[max-height,padding] duration-300 ease-in-out overflow-hidden",
+                isMiniCalendarVisible ? "max-h-[200px] p-2" : "max-h-0 p-0 pt-2" // Adjust max-h
+              )}>
+                <MiniCalendar 
+                  selectedDate={selectedDate} 
+                  onDateChange={handleDateChange}
+                />
+              </div>
+
+            {/* Mini Calendar Toggle Button - Only show if main calendar is visible */}
+            {!isCalendarCollapsed && (
+              <div className="px-2 pb-1 border-b border-gray-200">
+                 <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-center text-xs text-gray-500 hover:bg-gray-100"
+                    onClick={() => setIsMiniCalendarVisible((v) => !v)}
+                  >
+                    {isMiniCalendarVisible ? (
+                      <>Hide Calendar <ChevronUp className="ml-1 h-3 w-3" /></>
+                    ) : (
+                      <>Show Calendar <ChevronDown className="ml-1 h-3 w-3" /></>
+                    )}
+                  </Button>
+              </div>
+            )}
             
             {/* Kanban Board */}
             <div className="flex-1 overflow-y-auto p-4">
@@ -84,27 +127,17 @@ export default function GoalsPage() {
           </div>
         </KanbanSlider>
 
-        {/* Main Calendar Area */}
-        <div className="flex-1 overflow-hidden">
-          <CalendarView
-            events={events}
-            onCreate={handleCreate}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-          />
-        </div>
-
-        {/* Right Panel (can be used later for event details or another view) */}
-        <KanbanSlider 
-          className="border-l" 
-          side="right"
-          otherPanelCollapsed={leftCollapsed}
-        >
-          <div className="h-full p-4">
-            <h2 className="text-lg font-semibold mb-4">Event Details</h2>
-            <p className="text-gray-500">Select an event to view details</p>
+        {/* Calendar Main Area - Conditionally render */}
+        {!isCalendarCollapsed && (
+          <div className="flex-1 overflow-hidden">
+            <CalendarView
+              events={events}
+              onCreate={handleCreate}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+            />
           </div>
-        </KanbanSlider>
+        )}
       </main>
     </div>
   );

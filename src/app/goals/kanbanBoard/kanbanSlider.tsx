@@ -1,49 +1,45 @@
 'use client'
 
-import React, { useState, useRef, useEffect } from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import React, { useState, useRef } from 'react'
 import { cn } from '~/lib/utils'
+
+export enum SliderDirection {
+  Left,   // Slider on the left (kanban)
+  Right,  // Slider on the right (calendar)
+}
 
 type Props = {
   children: React.ReactNode
   className?: string
-  side?: 'left' | 'right'
-  otherPanelCollapsed?: boolean
+  direction: SliderDirection
+  defaultWidth?: number
+  isCollapsed?: boolean // Is THIS slider collapsed?
+  isCalendarCollapsed?: boolean // Is the OTHER (calendar) slider collapsed?
 }
 
 export function KanbanSlider({ 
   children, 
   className, 
-  side = 'left',
-  otherPanelCollapsed = false
+  direction, 
+  defaultWidth = 350,
+  isCollapsed: externalIsCollapsed, // Controlled state for this slider
+  isCalendarCollapsed = false, // Info about the other panel
 }: Props) {
-  // We'll control the sidebar in pixels instead of % – more predictable.
-  const [width, setWidth] = useState(side === 'left' ? 350 : 0) // default 350px for left
-  const [isCollapsed, setIsCollapsed] = useState(false)
+  // Use internal state if no external control is provided for THIS slider
+  const [internalIsCollapsed, setInternalIsCollapsed] = useState(false)
+  
+  // Determine if THIS slider is collapsed (controlled or uncontrolled)
+  const isCollapsed = externalIsCollapsed !== undefined ? externalIsCollapsed : internalIsCollapsed
+  
+  // Control the pixel width when not collapsed and not full-width
+  const [width, setWidth] = useState(defaultWidth)  
   const isDragging = useRef(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Setup keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl+E to toggle left panel
-      if (e.ctrlKey && e.key === 'e' && side === 'left') {
-        e.preventDefault()
-        setIsCollapsed(prev => !prev)
-      }
-      
-      // Ctrl+F to toggle right panel
-      if (e.ctrlKey && e.key === 'f' && side === 'right') {
-        e.preventDefault()
-        setIsCollapsed(prev => !prev)
-      }
-    }
-    
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [side])
-
   const handleMouseDown = (e: React.MouseEvent) => {
+    // Prevent dragging if the calendar is collapsed (kanban should be full width)
+    if (direction === SliderDirection.Left && isCalendarCollapsed) return;
+    
     e.preventDefault()
     isDragging.current = true
     document.addEventListener('mousemove', handleMouseMove)
@@ -52,21 +48,21 @@ export function KanbanSlider({
 
   const handleMouseMove = (e: MouseEvent) => {
     if (!isDragging.current || !containerRef.current) return
+    // If calendar is collapsed, don't allow resizing the full-width kanban
+    if (direction === SliderDirection.Left && isCalendarCollapsed) return;
+
     const rect = containerRef.current.getBoundingClientRect()
     
-    // Different calculations based on which side we're on
-    let newW
-    if (side === 'left') {
-      // For left panel, drag to the right increases width
-      newW = Math.max(0, e.clientX - rect.left)
-    } else {
-      // For right panel, drag to the left increases width
-      const rightEdge = window.innerWidth - e.clientX
-      newW = rightEdge
+    let newW: number
+    
+    if (direction === SliderDirection.Left) {
+      newW = e.clientX - rect.left
+    } else { // Right slider (shouldn't be visible if calendar is collapsed anyway)
+      newW = rect.right - e.clientX
     }
     
-    // Clamp between min and max values
-    setWidth(Math.min(Math.max(newW, 0), 600))
+    // Clamp between min and max sizes
+    setWidth(Math.min(Math.max(newW, 300), 700))
   }
 
   const handleMouseUp = () => {
@@ -75,49 +71,57 @@ export function KanbanSlider({
     document.removeEventListener('mouseup', handleMouseUp)
   }
 
+  // Determine the final styles based on collapsed states
+  const getContainerStyles = () => {
+    if (isCollapsed) {
+      // If THIS slider is collapsed, it's always width 0
+      return {
+        width: 0,
+        minWidth: 0,
+        maxWidth: 0,
+      }
+    } else if (direction === SliderDirection.Left && isCalendarCollapsed) {
+      // If this is the LEFT slider and the CALENDAR is collapsed, go full width
+      return {
+        width: '100%',
+        minWidth: '100%',
+        maxWidth: '100%',
+      }
+    } else {
+      // Otherwise, use the draggable width
+      return {
+        width: width,
+        minWidth: undefined, // Allow shrinking/growing based on content/drag
+        maxWidth: '100%', // Don't exceed parent
+      }
+    }
+  }
+
+  const containerStyles = getContainerStyles();
+
   return (
     <div
       ref={containerRef}
       className={cn(
-        'relative flex h-full transition-width duration-300', 
-        side === 'right' ? 'flex-row-reverse' : 'flex-row',
+        'relative flex h-full transition-[width] duration-200 ease-in-out', // Only transition width now
+        direction === SliderDirection.Right && 'flex-row-reverse',
         className
       )}
-      style={{ 
-        width: isCollapsed ? 0 : width,
-        maxWidth: otherPanelCollapsed ? '100%' : '50%' // Allow more space when other panel is collapsed
-      }}
+      style={containerStyles}
     >
-      {/* Panel content */}
-      <div className="overflow-hidden h-full w-full">
-        {children}
-      </div>
+      {/* Content area */}
+      <div className="h-full flex-1 overflow-hidden">{children}</div>
 
-      {/* Drag-handle */}
-      {!isCollapsed && (
+      {/* Drag handle - only show when not collapsed AND not full-width */}
+      {!isCollapsed && !(direction === SliderDirection.Left && isCalendarCollapsed) && (
         <div
-          className="w-1 cursor-col-resize bg-gray-200 hover:bg-gray-300"
+          className={cn(
+            "w-1 cursor-col-resize bg-gray-200 hover:bg-gray-300",
+            direction === SliderDirection.Right && "order-first"
+          )}
           onMouseDown={handleMouseDown}
         />
       )}
-
-      {/* Collapse/Expand button */}
-      <button
-        onClick={() => setIsCollapsed((c) => !c)}
-        className={cn(
-          "absolute top-4 z-10 bg-primary text-white rounded-full p-1 shadow",
-          side === 'left' 
-            ? "right-0 transform translate-x-1/2" 
-            : "left-0 transform -translate-x-1/2"
-        )}
-        aria-label={isCollapsed ? 'Expand panel' : 'Collapse panel'}
-      >
-        {isCollapsed ? (
-          side === 'left' ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />
-        ) : (
-          side === 'left' ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />
-        )}
-      </button>
     </div>
   )
 }

@@ -1,60 +1,128 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { ChevronLeft, ChevronRight } from "lucide-react"
-import { cn } from "~/lib/utils"
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useMemo, useState } from "react";
+import { cn } from "~/lib/utils";
 
-type MiniMonthCalendarProps = {
-  currentDate: Date
-  onDateSelect?: (date: Date) => void
-}
+type MiniCalendarProps = {
+  selectedDate: Date;
+  onDateChange: (date: Date) => void;
+  className?: string;
+};
 
-export default function MiniMonthCalendar({
-  currentDate,
-  onDateSelect,
-}: MiniMonthCalendarProps) {
-  const [viewDate, setViewDate] = useState(new Date(currentDate))
+export function MiniCalendar({
+  selectedDate,
+  onDateChange,
+  className,
+}: MiniCalendarProps) {
+  const [viewDate, setViewDate] = useState(new Date(selectedDate));
 
-  // Get month information
-  const year = viewDate.getFullYear()
-  const month = viewDate.getMonth()
-  
-  // Generate dates for the month grid
-  const dates = getDatesForMonth(viewDate)
-  
-  // Navigate to previous/next month
+  // Generate calendar grid
+  const calendarDays = useMemo(() => {
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+
+    // First day of the month
+    const firstDay = new Date(year, month, 1);
+    // Last day of the month
+    const lastDay = new Date(year, month + 1, 0);
+    
+    // Get the day of week for the first day (0 = Sunday, 1 = Monday, etc.)
+    const startOffset = firstDay.getDay();
+    
+    // Array of day numbers to display
+    const daysArray: Array<{
+      date: Date | null;
+      isCurrentMonth: boolean;
+      isToday: boolean;
+      isSelected: boolean;
+    }> = [];
+
+    // Add previous month's days
+    for (let i = 0; i < startOffset; i++) {
+      const prevDate = new Date(year, month, -startOffset + i + 1);
+      daysArray.push({
+        date: prevDate,
+        isCurrentMonth: false,
+        isToday: isSameDay(prevDate, new Date()),
+        isSelected: isSameDay(prevDate, selectedDate),
+      });
+    }
+
+    // Add current month's days
+    for (let i = 1; i <= lastDay.getDate(); i++) {
+      const currentDate = new Date(year, month, i);
+      daysArray.push({
+        date: currentDate,
+        isCurrentMonth: true,
+        isToday: isSameDay(currentDate, new Date()),
+        isSelected: isSameDay(currentDate, selectedDate),
+      });
+    }
+
+    // Calculate how many days from next month are needed to complete the grid
+    const totalCells = Math.ceil(daysArray.length / 7) * 7;
+    const remainingCells = totalCells - daysArray.length;
+    
+    // Add next month's days
+    for (let i = 1; i <= remainingCells; i++) {
+      const nextDate = new Date(year, month + 1, i);
+      daysArray.push({
+        date: nextDate,
+        isCurrentMonth: false,
+        isToday: isSameDay(nextDate, new Date()),
+        isSelected: isSameDay(nextDate, selectedDate),
+      });
+    }
+
+    return daysArray;
+  }, [viewDate, selectedDate]);
+
+  // Helper for date comparison
+  function isSameDay(date1: Date, date2: Date): boolean {
+    return (
+      date1.getFullYear() === date2.getFullYear() &&
+      date1.getMonth() === date2.getMonth() &&
+      date1.getDate() === date2.getDate()
+    );
+  }
+
+  // Navigate to previous month
   const prevMonth = () => {
-    const newDate = new Date(viewDate)
-    newDate.setMonth(newDate.getMonth() - 1)
-    setViewDate(newDate)
-  }
-  
+    setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1));
+  };
+
+  // Navigate to next month
   const nextMonth = () => {
-    const newDate = new Date(viewDate)
-    newDate.setMonth(newDate.getMonth() + 1)
-    setViewDate(newDate)
-  }
-  
-  // Format month and year for display
-  const monthYearDisplay = viewDate.toLocaleString('default', { 
-    month: 'long', 
-    year: 'numeric' 
-  })
-  
+    setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1));
+  };
+
+  // Handle day selection
+  const handleDayClick = (date: Date | null) => {
+    if (date) {
+      onDateChange(date);
+    }
+  };
+
   return (
-    <div className="w-full p-2 bg-white rounded">
-      {/* Month navigation header */}
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-lg font-medium">{monthYearDisplay}</h3>
+    <div className={cn("w-full bg-white rounded-md", className)}>
+      {/* Calendar Header */}
+      <div className="flex items-center justify-between mb-1 px-1">
+        <h2 className="text-base font-medium">
+          {viewDate.toLocaleDateString("en-US", {
+            month: "long",
+            year: "numeric",
+          })}
+        </h2>
         <div className="flex space-x-1">
-          <button 
+          <button
             onClick={prevMonth}
             className="p-1 rounded hover:bg-gray-100"
             aria-label="Previous month"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <button 
+          <button
             onClick={nextMonth}
             className="p-1 rounded hover:bg-gray-100"
             aria-label="Next month"
@@ -63,96 +131,34 @@ export default function MiniMonthCalendar({
           </button>
         </div>
       </div>
-      
-      {/* Day headers */}
-      <div className="grid grid-cols-7 gap-1 text-center text-xs mb-1">
-        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
-          <div key={i} className="font-medium">{day}</div>
+
+      {/* Day Headers */}
+      <div className="grid grid-cols-7 text-center text-xs text-gray-500 mb-1">
+        {["S", "M", "T", "W", "T", "F", "S"].map((day, i) => (
+          <div key={i} className="h-5 flex items-center justify-center">
+            {day}
+          </div>
         ))}
       </div>
-      
-      {/* Calendar grid */}
+
+      {/* Calendar Days */}
       <div className="grid grid-cols-7 gap-1">
-        {dates.map((date, i) => {
-          const isCurrentMonth = date.getMonth() === month
-          const isToday = isSameDay(date, new Date())
-          const isSelected = isSameDay(date, currentDate)
-          
-          // Highlight dates from current week (next 7 days from today)
-          const isInCurrentWeek = isDateInNext7Days(date, currentDate)
-          
-          return (
-            <button
-              key={i}
-              onClick={() => onDateSelect?.(date)}
-              disabled={!isCurrentMonth}
-              className={cn(
-                "h-8 w-8 rounded-full flex items-center justify-center text-xs",
-                !isCurrentMonth && "text-gray-300",
-                isToday && "bg-blue-600 text-white",
-                isSelected && !isToday && "border-2 border-blue-600",
-                isInCurrentWeek && !isToday && !isSelected && "bg-blue-100",
-              )}
-            >
-              {date.getDate()}
-            </button>
-          )
-        })}
+        {calendarDays.map((dayInfo, index) => (
+          <button
+            key={index}
+            onClick={() => handleDayClick(dayInfo.date)}
+            className={cn(
+              "h-6 w-6 flex items-center justify-center text-xs rounded-full mx-auto",
+              !dayInfo.isCurrentMonth && "text-gray-400",
+              dayInfo.isToday && !dayInfo.isSelected && "bg-blue-100",
+              dayInfo.isSelected && "bg-blue-600 text-white",
+              !dayInfo.isSelected && "hover:bg-gray-100"
+            )}
+          >
+            {dayInfo.date?.getDate()}
+          </button>
+        ))}
       </div>
     </div>
-  )
-}
-
-// Helper function to generate dates for the month view (including prev/next month dates)
-function getDatesForMonth(date: Date) {
-  const year = date.getFullYear()
-  const month = date.getMonth()
-  
-  // First day of the month
-  const firstDayOfMonth = new Date(year, month, 1)
-  
-  // Last day of the month
-  const lastDayOfMonth = new Date(year, month + 1, 0)
-  
-  // Day of week for the first day (0 = Sunday, 6 = Saturday)
-  const firstDayOfWeek = firstDayOfMonth.getDay()
-  
-  // Calculate how many days we need from the previous month
-  const daysFromPrevMonth = firstDayOfWeek
-  
-  // Start date will be the first date shown in the calendar (can be from prev month)
-  const startDate = new Date(firstDayOfMonth)
-  startDate.setDate(1 - daysFromPrevMonth)
-  
-  // We'll always show 6 weeks (42 days) for consistency
-  const dates: Date[] = []
-  for (let i = 0; i < 42; i++) {
-    const date = new Date(startDate)
-    date.setDate(startDate.getDate() + i)
-    dates.push(date)
-  }
-  
-  return dates
-}
-
-// Helper function to check if two dates are the same day
-function isSameDay(date1: Date, date2: Date) {
-  return date1.getDate() === date2.getDate() &&
-         date1.getMonth() === date2.getMonth() &&
-         date1.getFullYear() === date2.getFullYear()
-}
-
-// Helper function to check if a date is within the next 7 days
-function isDateInNext7Days(date: Date, startDate: Date) {
-  const start = new Date(startDate)
-  start.setHours(0, 0, 0, 0)
-  
-  const end = new Date(start)
-  end.setDate(end.getDate() + 6)
-  end.setHours(23, 59, 59, 999)
-  
-  const compareDate = new Date(date)
-  compareDate.setHours(12, 0, 0, 0)
-  
-  return compareDate >= start && compareDate <= end
+  );
 }

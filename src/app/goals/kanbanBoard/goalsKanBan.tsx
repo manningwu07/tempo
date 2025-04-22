@@ -252,7 +252,7 @@ export function GoalsKanbanView() {
 
   return (
     <>
-      <div className="sticky top-0 z-10 bg-white pb-4">
+      <div className="sticky top-0 z-10 border-b border-gray-200 bg-white">
         <form onSubmit={addGoal} className="flex gap-2">
           <Input
             placeholder="New goal title"
