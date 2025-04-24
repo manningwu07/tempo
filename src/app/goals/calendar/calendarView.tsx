@@ -370,7 +370,7 @@ export default function CalendarView({
               return (
                 <div
                   key={h}
-                  className="absolute w-full pr-1 text-right text-xs text-gray-500"
+                  className="absolute w-full pr-1 text-right text-xs text-gray-500 my-3"
                   style={{
                     top: `${topPosition}%`,
                     // Adjust vertical alignment slightly if needed

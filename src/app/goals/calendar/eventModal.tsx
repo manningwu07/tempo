@@ -216,12 +216,12 @@ export function EventEditModal({
   );
 }
 
-// Helper function (keep or replace with library)
-function toDatetimeLocal(d: Date): string {
-  try {
-    const date = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
-    return date.toISOString().slice(0, 16);
-  } catch (e) {
-    return ""; // Handle invalid date if necessary
-  }
+function toDatetimeLocal(d: Date) {
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  const yyyy = d.getFullYear();
+  const MM = pad(d.getMonth() + 1);
+  const dd = pad(d.getDate());
+  const hh = pad(d.getHours());
+  const mm = pad(d.getMinutes());
+  return `${yyyy}-${MM}-${dd}T${hh}:${mm}`;
 }
