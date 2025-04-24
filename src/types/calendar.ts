@@ -1,5 +1,12 @@
 import type { ColorKey } from "~/components/colorPicker";
 
+export interface PositionedEvent extends CalendarEvent {
+  _positionData?: {
+    totalColumns: number;
+    column: number;
+  };
+}
+
 export type CalendarEvent = {
   id: string;
   title: string;

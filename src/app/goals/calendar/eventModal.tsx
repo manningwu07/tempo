@@ -81,7 +81,7 @@ export function EventEditModal({
     }
 
     const saveData = {
-      title: title.trim(),
+      title: title.trim() ?? "(No title)",
       description,
       start: startDate,
       end: endDate,

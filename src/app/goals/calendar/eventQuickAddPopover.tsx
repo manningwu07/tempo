@@ -12,7 +12,8 @@ import {
 import type { CalendarEvent } from "~/types/calendar";
 import { type ColorKey, ColorPicker } from "~/components/colorPicker";
 
-const DEFAULT_TASK_COLOR: ColorKey = "blue"; // Default blue
+const DEFAULT_TASK_COLOR: ColorKey = "blue";
+const DEFAULT_GOAL_COLOR: ColorKey = "orange";
 
 type EventQuickAddPopoverProps = {
   isOpen: boolean;
@@ -20,14 +21,16 @@ type EventQuickAddPopoverProps = {
   initialData: {
     start: Date;
     end: Date;
-    position: { x: number; y: number }; // Receive position
-    initialTaskColor?: ColorKey; // Optional initial color
+    position: { x: number; y: number };
+    initialTaskColor?: ColorKey;
+    initialGoalColor?: ColorKey;
   };
   onSave: (eventData: {
     title: string;
     start: Date;
     end: Date;
-    taskColor: ColorKey; // Popover always sets a task color
+    taskColor: ColorKey;
+    goalColor: ColorKey;
   }) => void;
   onOpenFullModal: (
     eventData: Partial<Omit<CalendarEvent, "id">> & {
@@ -48,6 +51,9 @@ export function EventQuickAddPopover({
   const [taskColor, setTaskColor] = useState<ColorKey>(
     initialData.initialTaskColor ?? DEFAULT_TASK_COLOR,
   );
+  const [goalColor, setGoalColor] = useState<ColorKey>(
+    initialData.initialGoalColor ?? DEFAULT_GOAL_COLOR,
+  );
   // Keep track of start/end internally if needed for display/modification
   const start = initialData.start;
   const end = initialData.end;
@@ -56,21 +62,16 @@ export function EventQuickAddPopover({
     // Reset form when initial data changes (popover opens)
     setTitle(""); // Always start with empty title for quick add
     setTaskColor(initialData.initialTaskColor ?? DEFAULT_TASK_COLOR);
+    setGoalColor(initialData.initialGoalColor ?? DEFAULT_GOAL_COLOR);
   }, [initialData]);
 
   const handleSave = () => {
-    if (!title.trim()) {
-      // TODO: Add better feedback
-      console.warn("Title is required for quick add.");
-      // Optionally focus the input or show a small error message
-      return;
-    }
-
     const eventToSave = {
-      title: title.trim(),
+      title: title.trim() ?? "(No title)",
       start: start,
       end: end,
       taskColor: taskColor,
+      goalColor: goalColor,
       // description, goalColor etc. will be added in full modal if needed
     };
     onSave(eventToSave);
@@ -134,19 +135,26 @@ export function EventQuickAddPopover({
               />
             </div>
             {/* Display Time Range */}
-            <div className="text-muted-foreground pl-10 text-sm">
-              {" "}
-              {/* Indent time */}
-              {start.toLocaleTimeString([], {
-                hour: "numeric",
-                minute: "2-digit",
-              })}{" "}
-              -{" "}
-              {end.toLocaleTimeString([], {
-                hour: "numeric",
-                minute: "2-digit",
-              })}
-              {/* Add date if spans multiple days */}
+            <div className="flex">
+              <ColorPicker
+                value={goalColor}
+                onChange={setGoalColor}
+                variant="saturated"
+              />
+              <div className="text-muted-foreground pl-2 text-sm">
+                {" "}
+                {/* Indent time */}
+                {start.toLocaleTimeString([], {
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}{" "}
+                -{" "}
+                {end.toLocaleTimeString([], {
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
+                {/* Add date if spans multiple days */}
+              </div>
             </div>
           </div>
           <div className="flex justify-between">

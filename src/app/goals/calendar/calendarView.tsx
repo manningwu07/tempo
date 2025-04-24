@@ -10,7 +10,7 @@ import React, {
 } from "react";
 import { COLORS, type ColorKey } from "~/components/colorPicker";
 import { cn } from "~/lib/utils";
-import type { CalendarEvent } from "~/types/calendar";
+import type { CalendarEvent, PositionedEvent } from "~/types/calendar";
 
 // --- Constants ---
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -38,13 +38,12 @@ type Props = {
 // --- Date/Time Helpers ---
 const getStartRow = (date: Date): number => {
   const minutes = date.getHours() * 60 + date.getMinutes();
-  return Math.floor(minutes / 15) + 1; // 1-based index for grid-row-start
+  return Math.floor(minutes / 15) + 2; // Why +2? idk it just works
 };
 
 const getEndRow = (date: Date): number => {
   const minutes = date.getHours() * 60 + date.getMinutes();
-  // If end time is exactly on the interval, it should end *before* the next line starts
-  return Math.floor(minutes / 15) + 1;
+  return Math.floor(minutes / 15) + 2;
 };
 
 // Gets the exact start time of the 15-min interval corresponding to the rowIndex
@@ -89,8 +88,7 @@ export default function CalendarView({
     const container = scrollContainerRef.current;
     if (container) {
       const rowToGo = SCROLL_TO_HOUR * 4; // Row index for the target hour
-      const scrollToPosition =
-        (rowToGo / GRID_ROWS) * container.scrollHeight;
+      const scrollToPosition = (rowToGo / GRID_ROWS) * container.scrollHeight;
       // Add a small offset to show the hour line itself
       const offset = -20; // Adjust as needed
       container.scrollTop = Math.max(0, scrollToPosition + offset);
@@ -111,9 +109,67 @@ export default function CalendarView({
     });
   }, [currentDate]); // Recalculate when currentDate changes
 
-  // --- Event Rendering (Colors applied, no functional change needed) ---
+  
+// Then modify the calculateEventPositions function
+const calculateEventPositions = useCallback((events: CalendarEvent[]): PositionedEvent[] => {
+  // Group events by day
+  const eventsByDay = events.reduce((acc, evt) => {
+    const day = new Date(evt.start).toDateString();
+    if (!acc[day]) acc[day] = [];
+    acc[day].push(evt);
+    return acc;
+  }, {} as Record<string, CalendarEvent[]>);
+
+  // Start with a shallow copy that we'll modify
+  const positionedEvents = events.map(evt => ({ ...evt } as PositionedEvent));
+  
+  Object.values(eventsByDay).forEach(dayEvents => {
+    // Sort events by start time
+    dayEvents.sort((a, b) => a.start.getTime() - b.start.getTime());
+    
+    // For each event, find its "column" (position among overlapping events)
+    const columns: CalendarEvent[][] = [];
+    
+    dayEvents.forEach(event => {
+      // Find the first column where this event doesn't overlap with any existing event
+      const columnIndex = columns.findIndex(column => {
+        const lastEventInColumn = column[column.length - 1];
+        return lastEventInColumn!.end <= event.start;
+      });
+      
+      if (columnIndex === -1) {
+        // No non-overlapping column found, create a new one
+        columns.push([event]);
+      } else {
+        // Add to existing column
+        columns[columnIndex]?.push(event);
+      }
+      
+      // Find this event in our positionedEvents array and add positioning data
+      const eventIndex = positionedEvents.findIndex(e => e.id === event.id);
+      if (eventIndex !== -1) {
+        const totalColumns = columns.length;
+        const eventColumn = columns.findIndex(col => col.some(e => e.id === event.id));
+        
+        // Add positioning metadata to the event
+        positionedEvents[eventIndex]!._positionData = {
+          totalColumns,
+          column: eventColumn
+        };
+      }
+    });
+  });
+  
+  return positionedEvents;
+}, []);
+
+  // Update the renderEvent function to use positioned events
   const renderEvent = useCallback(
-    (evt: CalendarEvent) => {
+    (
+      evt: CalendarEvent & {
+        _positionData?: { totalColumns: number; column: number };
+      },
+    ) => {
       const startDay = new Date(evt.start);
       startDay.setHours(0, 0, 0, 0);
 
@@ -130,6 +186,15 @@ export default function CalendarView({
         gridRowEnd = gridRowStart + 1;
       }
 
+      // Calculate width and left offset for overlapping events
+      const eventWidth = evt._positionData
+        ? `${100 / evt._positionData.totalColumns}%`
+        : "100%";
+
+      const eventLeft = evt._positionData
+        ? `${(evt._positionData.column * 100) / evt._positionData.totalColumns}%`
+        : "0%";
+
       const taskColorKey = evt.taskColor ?? DEFAULT_TASK_COLOR;
       const goalColorKey = evt.goalColor;
       const taskBgColor =
@@ -138,12 +203,19 @@ export default function CalendarView({
         ? COLORS[goalColorKey]?.saturated
         : "transparent";
 
+      // Calculate event duration in minutes for min-height
+      const durationMinutes =
+        (evt.end.getTime() - evt.start.getTime()) / (1000 * 60);
+      const isShortEvent = durationMinutes < 30;
+
       return (
         <div
           key={evt.id}
           className={cn(
             "relative z-10 cursor-pointer overflow-hidden rounded border border-black/10 p-1 text-xs text-white shadow",
             "border-l-4",
+            // Add minimum height for very short events
+            isShortEvent && "min-h-[22px]",
           )}
           style={{
             gridColumnStart,
@@ -152,10 +224,14 @@ export default function CalendarView({
             gridRowEnd,
             backgroundColor: taskBgColor,
             borderLeftColor: goalStripeColor,
+            // Position within the grid cell for overlapping events
+            width: eventWidth,
+            left: eventLeft,
+            position: evt._positionData ? "absolute" : "relative",
           }}
           onClick={(e) => {
             e.stopPropagation();
-            onEdit(evt);
+            requestAnimationFrame(() => onEdit(evt));
           }}
           title={`${evt.title}\n${evt.start.toLocaleTimeString([], {
             hour: "numeric",
@@ -167,6 +243,14 @@ export default function CalendarView({
         >
           <div className="flex h-full flex-col justify-between">
             <strong className="truncate">{evt.title}</strong>
+            {!isShortEvent && (
+              <div className="mt-1 text-[10px] opacity-90">
+                {evt.start.toLocaleTimeString([], {
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
+              </div>
+            )}
           </div>
         </div>
       );
@@ -262,7 +346,12 @@ export default function CalendarView({
   };
 
   const handleMouseUp = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-    if (!isDragging || !dragStartDate || !dragEndDate || dragDayIndex === null) {
+    if (
+      !isDragging ||
+      !dragStartDate ||
+      !dragEndDate ||
+      dragDayIndex === null
+    ) {
       setIsDragging(false);
       setDragDayIndex(null);
       return;
@@ -311,28 +400,34 @@ export default function CalendarView({
 
   // --- Drag Preview Calculation (No change needed) ---
   const dragPreview = useMemo(() => {
-    if (!isDragging || !dragStartDate || !dragEndDate || dragDayIndex === null) {
+    if (!isDragging || !dragStartDate || !dragEndDate) {
+      // Removed dragDayIndex check here, rely on dates
       return null;
     }
     // Find the column index based on the *actual date* being dragged on
-    const currentDragDayIndex = weekDays.findIndex(d => d.toDateString() === dragStartDate.toDateString());
-    if (currentDragDayIndex === -1) return null; // Should not happen if dragDayIndex is set
+    const currentDragDayIndex = weekDays.findIndex(
+      (d) => d.toDateString() === dragStartDate.toDateString(),
+    );
+    if (currentDragDayIndex === -1) return null;
 
     const gridColumnStart = currentDragDayIndex + 1;
     const gridRowStart = getStartRow(dragStartDate);
-    let gridRowEnd = getEndRow(dragEndDate);
+    let gridRowEnd = getEndRow(dragEndDate); // Use getEndRow for preview end
+
+    // Ensure minimum height for preview visually
     if (gridRowEnd <= gridRowStart) {
       gridRowEnd = gridRowStart + 1;
     }
 
     return { gridColumnStart, gridRowStart, gridRowEnd };
-  }, [isDragging, dragStartDate, dragEndDate, dragDayIndex, weekDays]); // Add weekDays dependency
+  }, [isDragging, dragStartDate, dragEndDate, weekDays]);
 
   return (
     <div className="flex h-full flex-col overflow-hidden border-t border-gray-200">
       {/* Header Row - Uses updated weekDays */}
       <div className="grid flex-none grid-cols-[auto_1fr] border-b border-gray-200 bg-white">
-        <div className="w-14 border-r border-gray-200"></div> {/* Time gutter */}
+        <div className="w-14 border-r border-gray-200"></div>{" "}
+        {/* Time gutter */}
         <div className="grid grid-cols-7">
           {weekDays.map((d, index) => (
             <div
@@ -411,10 +506,7 @@ export default function CalendarView({
             }
           }}
         >
-          {/* REMOVED 15-min Horizontal Grid Lines */}
-          {/* <Array.from({ length: GRID_ROWS -1 }).map((_, i) => ( ... ))} */}
-
-          {/* Hour Lines (darker) - KEEP THESE */}
+          {/* Horizontal Hour Lines */}
           {HOURS.slice(1).map((h) => (
             <div
               key={`h-line-hour-${h}`}
@@ -433,12 +525,13 @@ export default function CalendarView({
           ))}
 
           {/* Render Existing Events */}
-          {events.map(renderEvent)}
+
+          {calculateEventPositions(events).map(renderEvent)}
 
           {/* Real-time Drag Preview */}
           {dragPreview && (
             <div
-              className="pointer-events-none absolute z-5 rounded border border-blue-400 bg-blue-200/50"
+              className="pointer-events-none z-5 w-full rounded border border-blue-400 bg-blue-200/90"
               style={{
                 gridColumnStart: dragPreview.gridColumnStart,
                 gridColumnEnd: dragPreview.gridColumnStart + 1,
@@ -458,7 +551,7 @@ export default function CalendarView({
                 width: `${nowIndicatorWidthPercent}%`,
               }}
             >
-              <span className="absolute -left-1 -top-[3px] h-[6px] w-[6px] rounded-full bg-red-500"></span>
+              <span className="absolute -top-[3px] -left-1 h-[6px] w-[6px] rounded-full bg-red-500"></span>
             </div>
           )}
         </div>
