@@ -14,7 +14,7 @@ import {
   DialogFooter,
   DialogClose,
 } from "~/components/ui/dialog";
-import type { CalendarEvent } from "./calendarView";
+import type { CalendarEvent } from "~/types/calendar";
 import { ColorPicker, type ColorKey } from "~/components/colorPicker";
 
 // TODO: Import a proper Date/Time Picker component

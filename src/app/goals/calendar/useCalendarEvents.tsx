@@ -1,6 +1,6 @@
 // src/app/goals/calendar/useCalendarEvents.ts
 import { useState, useCallback } from "react";
-import type { CalendarEvent } from "./calendarView";
+import type { CalendarEvent } from "~/types/calendar";
 import type { ColorKey } from "~/components/colorPicker";
 
 // Type for popover data including position

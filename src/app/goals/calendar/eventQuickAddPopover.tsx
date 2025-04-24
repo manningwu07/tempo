@@ -9,7 +9,7 @@ import {
   PopoverContent,
   PopoverTrigger, // Keep trigger for structure, even if virtual
 } from "~/components/ui/popover";
-import type { CalendarEvent } from "./calendarView";
+import type { CalendarEvent } from "~/types/calendar";
 import { type ColorKey, ColorPicker } from "~/components/colorPicker";
 
 const DEFAULT_TASK_COLOR: ColorKey = "blue"; // Default blue

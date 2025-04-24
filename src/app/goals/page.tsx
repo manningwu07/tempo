@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react";
 import { Navbar } from "../navBar";
 import { GoalsKanbanView } from "./kanbanBoard/goalsKanBan";
-import CalendarView, { type CalendarEvent } from "./calendar/calendarView";
+import CalendarView from "./calendar/calendarView";
 import { KanbanSlider, SliderDirection } from "./kanbanBoard/kanbanSlider";
 import { MiniCalendar } from "./calendar/miniMonthCalendar";
 import { cn } from "~/lib/utils";
@@ -13,7 +13,7 @@ import { Button } from "~/components/ui/button";
 import { useCalendarEvents } from "./calendar/useCalendarEvents";
 import { EventEditModal } from "./calendar/eventModal";
 import { EventQuickAddPopover } from "./calendar/eventQuickAddPopover";
-import { COLORS } from "~/components/colorPicker";
+import type { CalendarEvent } from "~/types/calendar";
 
 const initialCalendarEvents: CalendarEvent[] | undefined = [
   {

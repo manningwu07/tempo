@@ -10,25 +10,20 @@ import React, {
 } from "react";
 import { COLORS, type ColorKey } from "~/components/colorPicker";
 import { cn } from "~/lib/utils";
+import type { CalendarEvent } from "~/types/calendar";
 
-export type CalendarEvent = {
-  id: string;
-  title: string;
-  description: string;
-  start: Date;
-  end: Date;
-  notifications?: Date[];
-  goalId?: string;
-  goalColor?: ColorKey;
-  taskId?: string;
-  taskColor?: ColorKey;
-  type?: "goal" | "task";
-};
+// --- Constants ---
+const HOURS = Array.from({ length: 24 }, (_, i) => i);
+const TOTAL_MINUTES_IN_DAY = 24 * 60;
+const GRID_ROWS = 24 * 4; // 96 rows for 15-minute intervals
+const MIN_EVENT_DURATION_MINUTES = 15;
+const DEFAULT_TASK_COLOR: ColorKey = "blue";
+const SCROLL_TO_HOUR = 8; // Hour to scroll to on load (e.g., 8 for 8 AM)
 
+// --- Props Type ---
 type Props = {
   events: CalendarEvent[];
   currentDate: Date;
-  // Updated handler signature to include position
   onOpenPopover: (
     start: Date,
     end: Date,
@@ -36,14 +31,9 @@ type Props = {
   ) => void;
   onEdit: (evt: CalendarEvent) => void;
   onDelete: (id: string) => void;
-  weekStartsOn?: 0 | 1;
+  // weekStartsOn prop is no longer needed if current day is always first
+  // weekStartsOn?: 0 | 1;
 };
-
-const HOURS = Array.from({ length: 24 }, (_, i) => i);
-const TOTAL_MINUTES_IN_DAY = 24 * 60;
-const GRID_ROWS = 24 * 4; // 96 rows for 15-minute intervals
-const MIN_EVENT_DURATION_MINUTES = 15;
-const DEFAULT_TASK_COLOR: ColorKey = "blue"; // Default blue
 
 // --- Date/Time Helpers ---
 const getStartRow = (date: Date): number => {
@@ -53,19 +43,21 @@ const getStartRow = (date: Date): number => {
 
 const getEndRow = (date: Date): number => {
   const minutes = date.getHours() * 60 + date.getMinutes();
+  // If end time is exactly on the interval, it should end *before* the next line starts
   return Math.floor(minutes / 15) + 1;
 };
 
+// Gets the exact start time of the 15-min interval corresponding to the rowIndex
 const getDateFromCell = (
-  dayIndex: number,
-  rowIndex: number, // 0-based row index from calculation
+  dayIndex: number, // 0-6 relative to weekDays array
+  rowIndex: number, // 0-95, representing the 15-min slot index
   weekDays: Date[],
 ): Date => {
-  const baseDate = new Date(weekDays[dayIndex]!);
-  const totalMinutes = rowIndex * 15;
+  const baseDate = new Date(weekDays[dayIndex]!); // Get the correct day
+  const totalMinutes = rowIndex * 15; // Calculate minutes from start of day (00:00)
   const hour = Math.floor(totalMinutes / 60);
   const minute = totalMinutes % 60;
-  baseDate.setHours(hour, minute, 0, 0);
+  baseDate.setHours(hour, minute, 0, 0); // Set time on the correct day
   return baseDate;
 };
 // --- End Helpers ---
@@ -73,39 +65,53 @@ const getDateFromCell = (
 export default function CalendarView({
   events,
   currentDate,
-  onOpenPopover, // Updated prop name/signature
+  onOpenPopover,
   onEdit,
   onDelete,
-  weekStartsOn = 0,
 }: Props) {
   const [now, setNow] = useState(new Date());
   const gridRef = useRef<HTMLDivElement>(null);
+  // Ref for the scrollable container (parent of the grid)
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStartDate, setDragStartDate] = useState<Date | null>(null);
   const [dragEndDate, setDragEndDate] = useState<Date | null>(null);
-  const [dragDayIndex, setDragDayIndex] = useState<number | null>(null); // Track drag day
+  const [dragDayIndex, setDragDayIndex] = useState<number | null>(null);
 
+  // Update "now" indicator every minute
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(id);
   }, []);
 
-  // Calculate week days based on currentDate prop, not internal 'now' state
+  // Scroll to ~8 AM on initial load
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (container) {
+      const rowToGo = SCROLL_TO_HOUR * 4; // Row index for the target hour
+      const scrollToPosition =
+        (rowToGo / GRID_ROWS) * container.scrollHeight;
+      // Add a small offset to show the hour line itself
+      const offset = -20; // Adjust as needed
+      container.scrollTop = Math.max(0, scrollToPosition + offset);
+    }
+    // Run only once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Calculate week days starting from the *currentDate*
   const weekDays = useMemo(() => {
     const startDay = new Date(currentDate);
-    startDay.setHours(0, 0, 0, 0);
-    const dayOfWeek = startDay.getDay(); // 0 = Sunday, 1 = Monday...
-    const diff = startDay.getDate() - dayOfWeek + (weekStartsOn === 1 ? 1 : 0); // Adjust based on week start
-    const firstDayOfWeek = new Date(startDay.setDate(diff));
+    startDay.setHours(0, 0, 0, 0); // Normalize start day
 
     return Array.from({ length: 7 }).map((_, i) => {
-      const d = new Date(firstDayOfWeek);
-      d.setDate(d.getDate() + i);
+      const d = new Date(startDay);
+      d.setDate(d.getDate() + i); // Add days sequentially from startDay
       return d;
     });
-  }, [currentDate, weekStartsOn]);
+  }, [currentDate]); // Recalculate when currentDate changes
 
-  // --- Event Rendering with Colors ---
+  // --- Event Rendering (Colors applied, no functional change needed) ---
   const renderEvent = useCallback(
     (evt: CalendarEvent) => {
       const startDay = new Date(evt.start);
@@ -115,32 +121,29 @@ export default function CalendarView({
         (d) => d.getTime() === startDay.getTime(),
       );
 
-      if (dayIndex === -1) return null; // Event not in this week view
+      if (dayIndex === -1) return null;
 
-      const gridColumnStart = dayIndex + 1; // 1-based index
+      const gridColumnStart = dayIndex + 1;
       const gridRowStart = getStartRow(evt.start);
-      // Calculate end row - ensure it spans at least one cell even if duration is short
       let gridRowEnd = getEndRow(evt.end);
       if (gridRowEnd <= gridRowStart) {
-          gridRowEnd = gridRowStart + 1; // Minimum 1 row span
+        gridRowEnd = gridRowStart + 1;
       }
 
-
-      // Determine colors
       const taskColorKey = evt.taskColor ?? DEFAULT_TASK_COLOR;
       const goalColorKey = evt.goalColor;
-
-      const taskBgColor = COLORS[taskColorKey]?.saturated ?? COLORS.blue.saturated;
+      const taskBgColor =
+        COLORS[taskColorKey]?.saturated ?? COLORS.blue.saturated;
       const goalStripeColor = goalColorKey
         ? COLORS[goalColorKey]?.saturated
-        : "transparent"; // No stripe if no goal color
+        : "transparent";
 
       return (
         <div
           key={evt.id}
           className={cn(
             "relative z-10 cursor-pointer overflow-hidden rounded border border-black/10 p-1 text-xs text-white shadow",
-            "border-l-4", // Add left border for the stripe
+            "border-l-4",
           )}
           style={{
             gridColumnStart,
@@ -148,7 +151,7 @@ export default function CalendarView({
             gridRowStart,
             gridRowEnd,
             backgroundColor: taskBgColor,
-            borderLeftColor: goalStripeColor, // Apply goal color to left border
+            borderLeftColor: goalStripeColor,
           }}
           onClick={(e) => {
             e.stopPropagation();
@@ -164,92 +167,103 @@ export default function CalendarView({
         >
           <div className="flex h-full flex-col justify-between">
             <strong className="truncate">{evt.title}</strong>
-            {/* Consider moving delete to popover/modal */}
-            {/* <button
-              className="absolute bottom-0 right-0 h-4 w-4 rounded-full bg-black/20 text-center text-xs leading-none text-white hover:bg-black/40"
-              onClick={(e) => { e.stopPropagation(); onDelete(evt.id); }}
-            > × </button> */}
           </div>
         </div>
       );
     },
-    [weekDays, onEdit /* onDelete */], // Remove onDelete if button removed
+    [weekDays, onEdit],
   );
 
   // --- Drag and Click Handling ---
+  // Calculates cell based on mouse event relative to the scrollable grid
   const getCellFromMouseEvent = (
     e: React.MouseEvent<HTMLDivElement, MouseEvent>,
   ): { dayIndex: number; rowIndex: number } | null => {
     const gridElement = gridRef.current;
-    if (!gridElement) return null;
+    // Use the scrollable container ref
+    const scrollContainer = scrollContainerRef.current;
+    if (!gridElement || !scrollContainer) return null;
 
-    const rect = gridElement.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top; // Use clientY relative to viewport
+    const gridRect = gridElement.getBoundingClientRect();
+    const containerRect = scrollContainer.getBoundingClientRect();
 
-    // Adjust y for scroll position of the grid container
-    const scrollableParent = gridElement.parentElement; // Assuming parent scrolls
-    const adjustedY = y + (scrollableParent?.scrollTop ?? 0);
+    // Calculate X relative to grid container
+    const x = e.clientX - gridRect.left;
 
+    // Calculate Y relative to grid container, accounting for scroll
+    // clientY is viewport relative. Subtract container top, add scroll amount.
+    const y = e.clientY - containerRect.top + scrollContainer.scrollTop;
 
     // Calculate day index (0-6)
-    const dayWidth = rect.width / 7;
+    const dayWidth = gridRect.width / 7;
     const dayIndex = Math.floor(x / dayWidth);
     if (dayIndex < 0 || dayIndex > 6) return null;
 
-    // Calculate row index (0-95) based on grid's total height
-    const totalGridHeight = gridElement.scrollHeight; // Use scrollHeight for actual content height
-    const clickedRow = Math.floor((adjustedY / totalGridHeight) * GRID_ROWS);
+    // Calculate row index (0-95) based on grid's total scroll height
+    const totalGridHeight = gridElement.scrollHeight;
+    // Ensure row index is calculated correctly based on the Y within the grid
+    const clickedRow = Math.floor((y / totalGridHeight) * GRID_ROWS);
 
-    if (clickedRow < 0 || clickedRow >= GRID_ROWS) return null;
+    // Clamp row index to valid range
+    const clampedRowIndex = Math.max(0, Math.min(GRID_ROWS - 1, clickedRow));
 
-    return { dayIndex, rowIndex: clickedRow };
+    // console.log(`Click Y: ${e.clientY}, Container Top: ${containerRect.top}, ScrollTop: ${scrollContainer.scrollTop}, Adjusted Y: ${y}, Row: ${clampedRowIndex}`); // Debugging
+
+    return { dayIndex, rowIndex: clampedRowIndex };
   };
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
     const cell = getCellFromMouseEvent(e);
     if (!cell) return;
 
+    // Use the calculated cell's start time directly
     const startDate = getDateFromCell(cell.dayIndex, cell.rowIndex, weekDays);
+    // console.log("Mouse Down Start Date:", startDate); // Debugging
+
     setIsDragging(true);
     setDragStartDate(startDate);
-    setDragEndDate(startDate); // Initially, start and end are the same
-    setDragDayIndex(cell.dayIndex); // Store the day index where drag started
-    e.preventDefault(); // Prevent text selection
+    setDragEndDate(startDate);
+    setDragDayIndex(cell.dayIndex);
+    e.preventDefault();
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
     if (!isDragging || !dragStartDate || dragDayIndex === null) return;
 
     const cell = getCellFromMouseEvent(e);
-    // If mouse moves outside grid or to a different day, stop updating end date?
-    // Or allow multi-day drag? For now, constrain to start day.
     if (!cell || cell.dayIndex !== dragDayIndex) {
-        // Optionally clamp to end of start day if mouse moves out?
-        // Or just stop updating:
-        return;
+      // Optional: Clamp to end of start day if needed, or just return
+      return;
     }
 
-
-    const currentDragDate = getDateFromCell(
+    // Get the time for the *current* cell being hovered over
+    const currentHoverDate = getDateFromCell(
       cell.dayIndex,
       cell.rowIndex,
       weekDays,
     );
 
-    // Update End Date: Ensure end is always >= start
-    // Add minimum duration visually during drag? Maybe not necessary yet.
-    if (currentDragDate >= dragStartDate) {
-      setDragEndDate(currentDragDate);
+    // The end date should represent the *end* of the interval being dragged *to*.
+    // So, add 15 minutes to the start time of the cell being hovered over.
+    const endDate = new Date(currentHoverDate);
+    endDate.setMinutes(endDate.getMinutes() + MIN_EVENT_DURATION_MINUTES);
+
+    // Ensure end date is always after start date
+    if (endDate > dragStartDate) {
+      setDragEndDate(endDate);
     } else {
-      // If dragging upwards past start, keep end = start
-      setDragEndDate(dragStartDate);
+      // If dragging upwards, make end = start + min duration
+      const minEndDate = new Date(dragStartDate);
+      minEndDate.setMinutes(
+        minEndDate.getMinutes() + MIN_EVENT_DURATION_MINUTES,
+      );
+      setDragEndDate(minEndDate);
     }
   };
 
   const handleMouseUp = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
     if (!isDragging || !dragStartDate || !dragEndDate || dragDayIndex === null) {
-      setIsDragging(false); // Reset just in case
+      setIsDragging(false);
       setDragDayIndex(null);
       return;
     }
@@ -257,11 +271,11 @@ export default function CalendarView({
     setIsDragging(false);
     setDragDayIndex(null);
 
-    // Use the final drag dates
     let finalStartDate = dragStartDate;
     let finalEndDate = dragEndDate;
 
-    // Ensure minimum duration on mouse up
+    // If it was essentially a click (start and end are very close)
+    // ensure minimum duration from the *start* time.
     const durationMinutes =
       (finalEndDate.getTime() - finalStartDate.getTime()) / (1000 * 60);
 
@@ -270,67 +284,53 @@ export default function CalendarView({
       finalEndDate.setMinutes(
         finalStartDate.getMinutes() + MIN_EVENT_DURATION_MINUTES,
       );
-    } else {
-      // Snap end time to the next 15-minute interval boundary for cleaner events
-      const endMinutes = finalEndDate.getMinutes();
-      const remainder = endMinutes % 15;
-      if (remainder !== 0) {
-        // Set minutes to the start of the *next* interval
-        finalEndDate.setMinutes(endMinutes - remainder + 15);
-      }
-       // If end time is exactly on an interval, it's already snapped.
     }
+    // No need to snap end time here, popover/modal can handle final adjustments if needed
 
+    // console.log("Mouse Up Final Start:", finalStartDate); // Debugging
+    // console.log("Mouse Up Final End:", finalEndDate); // Debugging
 
-    // Get mouse coordinates for popover positioning
     const position = { x: e.clientX, y: e.clientY };
-
-    // Call the popover handler with final dates and position
     onOpenPopover(finalStartDate, finalEndDate, position);
 
-    // Reset drag state
     setDragStartDate(null);
     setDragEndDate(null);
   };
 
-  // --- "Now" Indicator Logic ---
+  // --- "Now" Indicator Logic (Adjusted for current day first) ---
   const todayIndex = weekDays.findIndex(
     (d) => d.toDateString() === now.toDateString(),
-  );
+  ); // Will be 0 if today is the first day
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   const nowTopPercent = (nowMinutes / TOTAL_MINUTES_IN_DAY) * 100;
   const nowIndicatorVisible =
-    todayIndex !== -1 && nowTopPercent >= 0 && nowTopPercent <= 100; // Allow 0 and 100
+    todayIndex !== -1 && nowTopPercent >= 0 && nowTopPercent <= 100;
+  // Left position is based on todayIndex (which is now 0 if current day is first)
   const nowIndicatorLeftPercent = todayIndex * (100 / 7);
   const nowIndicatorWidthPercent = 100 / 7;
 
-  // --- Drag Preview Calculation ---
+  // --- Drag Preview Calculation (No change needed) ---
   const dragPreview = useMemo(() => {
     if (!isDragging || !dragStartDate || !dragEndDate || dragDayIndex === null) {
       return null;
     }
-    const gridColumnStart = dragDayIndex + 1;
-    const gridRowStart = getStartRow(dragStartDate);
-    // Calculate end row for preview, snap to *next* interval visually during drag
-    let gridRowEnd = getEndRow(dragEndDate);
-     const endMinutes = dragEndDate.getMinutes();
-     const remainder = endMinutes % 15;
-     if (remainder !== 0) {
-         // Make preview visually snap to the end of the interval being dragged into
-         gridRowEnd = Math.floor(endMinutes / 15) + 1 + 1; // +1 for floor, +1 for end row index
-     }
-     // Ensure minimum height for preview
-     if (gridRowEnd <= gridRowStart) {
-         gridRowEnd = gridRowStart + 1;
-     }
+    // Find the column index based on the *actual date* being dragged on
+    const currentDragDayIndex = weekDays.findIndex(d => d.toDateString() === dragStartDate.toDateString());
+    if (currentDragDayIndex === -1) return null; // Should not happen if dragDayIndex is set
 
+    const gridColumnStart = currentDragDayIndex + 1;
+    const gridRowStart = getStartRow(dragStartDate);
+    let gridRowEnd = getEndRow(dragEndDate);
+    if (gridRowEnd <= gridRowStart) {
+      gridRowEnd = gridRowStart + 1;
+    }
 
     return { gridColumnStart, gridRowStart, gridRowEnd };
-  }, [isDragging, dragStartDate, dragEndDate, dragDayIndex]);
+  }, [isDragging, dragStartDate, dragEndDate, dragDayIndex, weekDays]); // Add weekDays dependency
 
   return (
     <div className="flex h-full flex-col overflow-hidden border-t border-gray-200">
-      {/* Header Row */}
+      {/* Header Row - Uses updated weekDays */}
       <div className="grid flex-none grid-cols-[auto_1fr] border-b border-gray-200 bg-white">
         <div className="w-14 border-r border-gray-200"></div> {/* Time gutter */}
         <div className="grid grid-cols-7">
@@ -339,15 +339,16 @@ export default function CalendarView({
               key={d.toISOString()}
               className={cn(
                 "border-r border-gray-200 p-2 text-center text-sm font-medium",
-                index === 6 && "border-r-0", // No border on last day
+                index === 6 && "border-r-0",
               )}
             >
               <div>{d.toLocaleDateString(undefined, { weekday: "short" })}</div>
               <div
                 className={cn(
                   "mx-auto mt-1 flex h-8 w-8 items-center justify-center rounded-full",
+                  // Highlight based on comparing with *actual* today, not just index 0
                   d.toDateString() === new Date().toDateString()
-                    ? "bg-blue-600 font-semibold text-white" // Highlight today
+                    ? "bg-blue-600 font-semibold text-white"
                     : "text-gray-700",
                 )}
               >
@@ -358,26 +359,23 @@ export default function CalendarView({
         </div>
       </div>
 
-      {/* Scrollable Body */}
-      <div className="grid flex-1 grid-cols-[auto_1fr] overflow-y-auto">
+      {/* Scrollable Body - Add ref here */}
+      <div
+        ref={scrollContainerRef}
+        className="grid flex-1 grid-cols-[auto_1fr] overflow-y-auto"
+      >
         {/* Time Column */}
-        <div className="sticky top-0 z-20 w-14 flex-none border-r border-gray-200 bg-white"> {/* Sticky time */}
+        <div className="sticky top-0 z-20 w-14 flex-none border-r border-gray-200 bg-white">
           <div className="relative h-full">
             {HOURS.map((h) => {
-              // Position hour labels accurately based on GRID_ROWS
-              const rowNumber = h * 4; // 0, 4, 8, ...
+              const rowNumber = h * 4;
               const topPosition = (rowNumber / GRID_ROWS) * 100;
               return (
                 <div
                   key={h}
-                  className="absolute w-full pr-1 text-right text-xs text-gray-500 my-3"
-                  style={{
-                    top: `${topPosition}%`,
-                    // Adjust vertical alignment slightly if needed
-                    // transform: 'translateY(-50%)',
-                  }}
+                  className="absolute w-full pr-1 text-right text-xs text-gray-500"
+                  style={{ top: `${topPosition}%` }}
                 >
-                  {/* Show time only if not 0 */}
                   {h > 0 && (
                     <>
                       {h % 12 === 0 ? 12 : h % 12}
@@ -392,20 +390,19 @@ export default function CalendarView({
           </div>
         </div>
 
-        {/* Calendar Grid Area */}
+        {/* Calendar Grid Area - Add ref here */}
         <div
           ref={gridRef}
           className="relative grid cursor-crosshair grid-cols-7"
           style={{
-            gridTemplateRows: `repeat(${GRID_ROWS}, minmax(12px, 1fr))`, // Min height for rows
-            // Set a large height to ensure rows render, or calculate based on row height * GRID_ROWS
-             height: `${GRID_ROWS * 15}px`, // Example: 96 rows * 15px = 1440px
+            gridTemplateRows: `repeat(${GRID_ROWS}, minmax(12px, 1fr))`,
+            // Set height based on rows * min height (adjust 12px if needed)
+            height: `${GRID_ROWS * 12}px`, // e.g., 96 * 12 = 1152px
           }}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={() => {
-            // Cancel drag if mouse leaves grid
             if (isDragging) {
               setIsDragging(false);
               setDragStartDate(null);
@@ -414,30 +411,24 @@ export default function CalendarView({
             }
           }}
         >
-          {/* Horizontal Grid Lines (15 min intervals) */}
-          {Array.from({ length: GRID_ROWS -1 }).map((_, i) => (
-            <div
-              key={`h-line-${i}`}
-              className="pointer-events-none col-span-full border-b border-gray-100"
-              style={{ gridRow: i + 1 }} // Line starts *after* row i
-            ></div>
-          ))}
-          {/* Hour Lines (darker) */}
-           {HOURS.slice(1).map((h) => (
+          {/* REMOVED 15-min Horizontal Grid Lines */}
+          {/* <Array.from({ length: GRID_ROWS -1 }).map((_, i) => ( ... ))} */}
+
+          {/* Hour Lines (darker) - KEEP THESE */}
+          {HOURS.slice(1).map((h) => (
             <div
               key={`h-line-hour-${h}`}
-              className="pointer-events-none col-span-full border-b border-gray-200" // Darker hour lines
-              style={{ gridRow: h * 4 + 1 }} // Place on the hour mark
+              className="pointer-events-none col-span-full border-b border-gray-200" // Hour lines
+              style={{ gridRow: h * 4 + 1 }}
             ></div>
           ))}
-
 
           {/* Vertical Grid Lines */}
           {Array.from({ length: 6 }).map((_, i) => (
             <div
               key={`v-line-${i}`}
-              className="pointer-events-none row-span-full border-r border-gray-100"
-              style={{ gridColumn: i + 1, gridRow: `1 / ${GRID_ROWS + 1}` }} // Span all rows
+              className="pointer-events-none row-span-full border-r border-gray-100" // Lighter vertical lines
+              style={{ gridColumn: i + 1, gridRow: `1 / ${GRID_ROWS + 1}` }}
             ></div>
           ))}
 
@@ -467,7 +458,6 @@ export default function CalendarView({
                 width: `${nowIndicatorWidthPercent}%`,
               }}
             >
-              {/* Small circle at the start of the line */}
               <span className="absolute -left-1 -top-[3px] h-[6px] w-[6px] rounded-full bg-red-500"></span>
             </div>
           )}
