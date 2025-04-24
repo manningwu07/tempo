@@ -23,7 +23,6 @@ import type { Goal, Column } from "~/types/kanbanBoard";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { ColorPicker, COLORS, type ColorKey } from "~/components/colorPicker";
-import { Plus } from "lucide-react";
 import { ConfirmationModal } from "./confirmationModal";
 import {
   loadGoalsFromDB,

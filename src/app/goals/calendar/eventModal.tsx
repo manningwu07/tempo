@@ -5,6 +5,7 @@ import React, { useState, useEffect } from "react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Textarea } from "~/components/ui/textarea";
+import { Label } from "~/components/ui/label"; // Use Label for accessibility
 import {
   Dialog,
   DialogContent,
@@ -12,16 +13,29 @@ import {
   DialogTitle,
   DialogFooter,
   DialogClose,
-} from "~/components/ui/dialog"; // Assuming Shadcn Dialog
+} from "~/components/ui/dialog";
 import type { CalendarEvent } from "./calendarView";
+import { ColorPicker, type ColorKey } from "~/components/colorPicker";
+
+// TODO: Import a proper Date/Time Picker component
+// import { DateTimePicker } from "~/components/ui/datetime-picker";
+
+const DEFAULT_TASK_COLOR: ColorKey = "blue";
 
 type EventEditModalProps = {
   isOpen: boolean;
-  // Can be a full event for editing, or partial {start, end} for creation
-  eventData: Partial<CalendarEvent> | { start: Date; end: Date } | null;
+  eventData: (Partial<CalendarEvent> | { start: Date; end: Date }) & {
+    taskColor?: ColorKey;
+    goalColor?: ColorKey;
+  } | null; // Adjusted type
   onClose: () => void;
-  onSave: (eventData: Omit<CalendarEvent, "id"> & { id?: string }) => void;
-  onDelete?: (id: string) => void; // Optional delete handler
+  onSave: (
+    eventData: Omit<CalendarEvent, "id" | "taskColor"> & {
+      id?: string;
+      taskColor?: ColorKey;
+    },
+  ) => void;
+  onDelete?: (id: string) => void;
 };
 
 export function EventEditModal({
@@ -35,46 +49,54 @@ export function EventEditModal({
   const [description, setDescription] = useState("");
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
-  // Add other fields as needed: type, goalId, taskId, notifications
+  const [taskColor, setTaskColor] = useState<ColorKey>(DEFAULT_TASK_COLOR);
+  const [goalColor, setGoalColor] = useState<ColorKey | undefined>(undefined);
 
   const isEditing = eventData && "id" in eventData && eventData.id;
 
   useEffect(() => {
     if (eventData) {
-      setTitle((eventData as Partial<CalendarEvent>).title ?? "New Event");
+      setTitle((eventData as Partial<CalendarEvent>).title ?? "");
       setDescription((eventData as Partial<CalendarEvent>).description ?? "");
       setStartDate(eventData.start ? new Date(eventData.start) : null);
       setEndDate(eventData.end ? new Date(eventData.end) : null);
-      // Reset other fields based on eventData
+      // Set colors, providing defaults if necessary
+      setTaskColor(eventData.taskColor ?? DEFAULT_TASK_COLOR);
+      setGoalColor(eventData.goalColor); // Can be undefined
     } else {
-      // Reset form when modal is closed or opened for creation without data
-      setTitle("New Event");
+      // Reset form - should ideally not happen if modal opens with data
+      setTitle("");
       setDescription("");
       setStartDate(null);
       setEndDate(null);
+      setTaskColor(DEFAULT_TASK_COLOR);
+      setGoalColor(undefined);
     }
-  }, [eventData]); // Re-run effect when eventData changes
+  }, [eventData]);
 
   const handleSave = () => {
-    if (!startDate || !endDate || !title) {
-      // Add proper validation feedback
-      console.error("Missing required fields");
+    if (!startDate || !endDate || !title.trim()) {
+      console.error("Missing required fields"); // TODO: Better validation UI
       return;
     }
 
-    const saveData: Omit<CalendarEvent, "id"> & { id?: string } = {
-      title,
+    const saveData = {
+      title: title.trim(),
       description,
       start: startDate,
       end: endDate,
-      // Add other fields: type, goalId, etc.
+      taskColor: taskColor,
+      goalColor: goalColor, // Include goal color (can be undefined)
+      // Add other fields: type, goalId, etc. from state if added
     };
 
-    if (isEditing && eventData && "id" in eventData) {
-      saveData.id = eventData.id; // Include ID if editing
-    }
+    // Add id only if editing
+    const finalData = isEditing && eventData && "id" in eventData
+        ? { ...saveData, id: eventData.id }
+        : saveData;
 
-    onSave(saveData);
+
+    onSave(finalData);
   };
 
   const handleDelete = () => {
@@ -83,59 +105,96 @@ export function EventEditModal({
     }
   };
 
-  // Render nothing if not open or no data (or handle initial state differently)
   if (!isOpen || !eventData) {
     return null;
   }
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[525px]">
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit Event" : "Create Event"}</DialogTitle>
-          {/* Optional: Add DialogDescription */}
         </DialogHeader>
         <div className="grid gap-4 py-4">
-          {/* --- Form Fields --- */}
-          {/* Replace with Shadcn Input */}
-          <Input
-            id="title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Add title"
-            className="col-span-3"
-          />
-
-          {/* Replace with Shadcn Textarea */}
-          <Textarea
-            id="description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Add description"
-            className="col-span-3"
-          />
-
-          {/* Date/Time Pickers - VERY basic example, replace with robust pickers */}
-          <div className="col-span-3 grid grid-cols-2 gap-2">
+          {/* Title Input */}
+          <div className="col-span-full">
+            <Label htmlFor="title" className="sr-only">
+              Title
+            </Label>
             <Input
-              type="datetime-local"
-              value={startDate ? toDatetimeLocal(startDate) : ""}
-              onChange={(e) => {
-                const v = e.currentTarget.value;
-                setStartDate(v ? new Date(v) : null);
-              }}
-            />
-            <Input
-              type="datetime-local"
-              value={endDate ? toDatetimeLocal(endDate) : ""}
-              onChange={(e) => {
-                const v = e.currentTarget.value;
-                setEndDate(v ? new Date(v) : null);
-              }}
+              id="title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Add title"
             />
           </div>
 
-          {/* Add fields for Type (Select), Goal/Task linking, Notifications */}
+          {/* Date/Time Pickers */}
+          <div className="col-span-full grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="start-date">Start</Label>
+              {/* TODO: Replace with <DateTimePicker date={startDate} setDate={setStartDate} /> */}
+              <Input
+                id="start-date"
+                type="datetime-local"
+                value={startDate ? toDatetimeLocal(startDate) : ""}
+                onChange={(e) =>
+                  setStartDate(e.target.value ? new Date(e.target.value) : null)
+                }
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label htmlFor="end-date">End</Label>
+              {/* TODO: Replace with <DateTimePicker date={endDate} setDate={setEndDate} /> */}
+              <Input
+                id="end-date"
+                type="datetime-local"
+                value={endDate ? toDatetimeLocal(endDate) : ""}
+                onChange={(e) =>
+                  setEndDate(e.target.value ? new Date(e.target.value) : null)
+                }
+                className="mt-1"
+              />
+            </div>
+          </div>
+
+          {/* Description */}
+          <div className="col-span-full">
+            <Label htmlFor="description">Description</Label>
+            <Textarea
+              id="description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Add description"
+              className="mt-1"
+            />
+          </div>
+
+          {/* Color Pickers */}
+          <div className="col-span-full grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <Label>Event Color</Label>
+              <ColorPicker
+                value={taskColor}
+                onChange={setTaskColor}
+                variant="saturated"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label>Goal Color (Stripe)</Label>
+              <ColorPicker
+                value={goalColor}
+                onChange={setGoalColor} // Allows unsetting if needed? Check ColorPicker logic
+                variant="saturated"
+                className="mt-1"
+              />
+              {/* Optional: Add a button to clear goalColor */}
+            </div>
+          </div>
+
+          {/* Add fields for Guests, Location, Meet, Notifications, etc. here */}
         </div>
         <DialogFooter className="sm:justify-between">
           <div>
@@ -157,12 +216,12 @@ export function EventEditModal({
   );
 }
 
-function toDatetimeLocal(d: Date) {
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  const yyyy = d.getFullYear();
-  const MM = pad(d.getMonth() + 1);
-  const dd = pad(d.getDate());
-  const hh = pad(d.getHours());
-  const mm = pad(d.getMinutes());
-  return `${yyyy}-${MM}-${dd}T${hh}:${mm}`;
+// Helper function (keep or replace with library)
+function toDatetimeLocal(d: Date): string {
+  try {
+    const date = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+    return date.toISOString().slice(0, 16);
+  } catch (e) {
+    return ""; // Handle invalid date if necessary
+  }
 }

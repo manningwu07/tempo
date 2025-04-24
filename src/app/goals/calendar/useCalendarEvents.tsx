@@ -1,85 +1,190 @@
 // src/app/goals/calendar/useCalendarEvents.ts
 import { useState, useCallback } from "react";
-import type { CalendarEvent } from "./calendarView"; // Assuming types are here or imported
+import type { CalendarEvent } from "./calendarView";
+import type { ColorKey } from "~/components/colorPicker";
+
+// Type for popover data including position
+type PopoverDataType = {
+  start: Date;
+  end: Date;
+  position: { x: number; y: number }; // Added position
+  // Initial color can be passed if needed, otherwise defaults below
+  initialTaskColor?: ColorKey;
+};
+
+// Type for data passed to the full modal (can include colors)
+type ModalDataType = (Partial<CalendarEvent> | { start: Date; end: Date }) & {
+  taskColor?: ColorKey;
+  goalColor?: ColorKey;
+};
+
+const DEFAULT_TASK_COLOR: ColorKey = "blue"; // Default to saturated blue
 
 export function useCalendarEvents(initialEvents: CalendarEvent[] = []) {
   const [events, setEvents] = useState<CalendarEvent[]>(initialEvents);
   const [selectedDate, setSelectedDate] = useState(new Date());
+
+  // --- Popover State ---
+  const [isPopoverOpen, setIsPopoverOpen] = useState(false);
+  const [popoverData, setPopoverData] = useState<PopoverDataType | null>(null);
+
+  // --- Modal State ---
   const [isModalOpen, setIsModalOpen] = useState(false);
-  // Store the event being edited, or the initial dates for creation
-  const [editingEvent, setEditingEvent] = useState<
-    Partial<CalendarEvent> | { start: Date; end: Date } | null
-  >(null);
+  const [modalEventData, setModalEventData] = useState<ModalDataType | null>(
+    null,
+  );
 
-  // --- CRUD Operations ---
+  // --- Event Creation Flow ---
 
-  // Called when drag finishes or click happens - prepares data for modal
-  const requestCreateEvent = useCallback((start: Date, end: Date) => {
-    setEditingEvent({ start, end }); // Set initial times for the modal
-    setIsModalOpen(true);
-  }, []);
+  // 1. Called by CalendarView - Opens Popover with position
+  const requestOpenPopover = useCallback(
+    (start: Date, end: Date, position: { x: number; y: number }) => {
+      setPopoverData({ start, end, position }); // Store position
+      setIsPopoverOpen(true);
+      setIsModalOpen(false);
+      setModalEventData(null);
+    },
+    [],
+  );
 
-  // Called when an existing event is clicked
+  // 2. Called by Popover "More Options" - Opens Modal with data from popover
+  const requestOpenFullModal = useCallback(
+    (
+      eventData: Partial<Omit<CalendarEvent, "id">> & {
+        start: Date;
+        end: Date;
+      },
+    ) => {
+      setModalEventData({
+        ...eventData,
+        // Ensure colors have defaults if not set in popover
+        taskColor: eventData.taskColor ?? DEFAULT_TASK_COLOR,
+      });
+      setIsModalOpen(true);
+      setIsPopoverOpen(false);
+      setPopoverData(null);
+    },
+    [],
+  );
+
+  // 3. Called by Popover "Save" - Saves directly
+  const saveFromPopover = useCallback(
+    (eventData: {
+      title: string;
+      start: Date;
+      end: Date;
+      taskColor: ColorKey;
+    }) => {
+      setEvents((prevEvents) => {
+        const newEvent: CalendarEvent = {
+          description: "",
+          ...eventData,
+          id: Date.now().toString(),
+          taskColor: eventData.taskColor ?? DEFAULT_TASK_COLOR, // Default blue
+        };
+        return [...prevEvents, newEvent];
+      });
+      setIsPopoverOpen(false);
+      setPopoverData(null);
+    },
+    [],
+  );
+
+  // --- Editing Flow ---
+
+  // Called when an existing event is clicked - Opens Modal directly
   const requestEditEvent = useCallback((event: CalendarEvent) => {
-    setEditingEvent(event);
+    setModalEventData(event); // Pass the full event data
     setIsModalOpen(true);
+    setIsPopoverOpen(false);
+    setPopoverData(null);
   }, []);
 
-  // Called from the modal on save
-  const saveEvent = useCallback(
-    (eventData: Omit<CalendarEvent, "id"> & { id?: string }) => {
+  // Called from the *full modal* on save
+  const saveFromModal = useCallback(
+    (
+      eventData: Omit<CalendarEvent, "id" | "taskColor"> & {
+        id?: string;
+        taskColor?: ColorKey;
+      },
+    ) => {
       setEvents((prevEvents) => {
         if (eventData.id) {
           // Update existing event
           return prevEvents.map((ev) =>
-            ev.id === eventData.id ? { ...ev, ...eventData } : ev
+            ev.id === eventData.id
+              ? ({
+                  ...ev,
+                  ...eventData,
+                  // Ensure taskColor has a value if somehow unset
+                  taskColor:
+                    eventData.taskColor ?? ev.taskColor ?? DEFAULT_TASK_COLOR,
+                } as CalendarEvent)
+              : ev,
           );
         } else {
-          // Create new event
+          // Create new event (modal opened directly or via popover)
           const newEvent: CalendarEvent = {
-            ...eventData,
-            id: Date.now().toString(), // Simple ID generation
+            ...eventData, // Spread the rest
+            id: Date.now().toString(),
+            taskColor: eventData.taskColor ?? DEFAULT_TASK_COLOR,
           };
           return [...prevEvents, newEvent];
         }
       });
-      setIsModalOpen(false); // Close modal after save
-      setEditingEvent(null);
+      setIsModalOpen(false);
+      setModalEventData(null);
     },
-    []
+    [],
   );
 
-  const deleteEvent = useCallback((id: string) => {
-    setEvents((prevEvents) => prevEvents.filter((e) => e.id !== id));
-    // Optional: Close modal if the deleted event was being edited
-    if (editingEvent && "id" in editingEvent && editingEvent.id === id) {
-      setIsModalOpen(false);
-      setEditingEvent(null);
-    }
-  }, [editingEvent]);
+  // --- Deletion ---
+  const deleteEvent = useCallback(
+    (id: string) => {
+      setEvents((prevEvents) => prevEvents.filter((e) => e.id !== id));
+      if (
+        modalEventData &&
+        "id" in modalEventData &&
+        modalEventData.id === id
+      ) {
+        setIsModalOpen(false);
+        setModalEventData(null);
+      }
+    },
+    [modalEventData],
+  );
 
-  // --- Modal and Date Handling ---
+  // --- Close Handlers ---
+  const closePopover = useCallback(() => {
+    setIsPopoverOpen(false);
+    setPopoverData(null);
+  }, []);
 
   const closeModal = useCallback(() => {
     setIsModalOpen(false);
-    setEditingEvent(null);
+    setModalEventData(null);
   }, []);
 
+  // --- Date Handling ---
   const handleDateChange = useCallback((date: Date) => {
     setSelectedDate(date);
-    // Optional: Add logic if needed when date changes, e.g., fetch new events
   }, []);
 
   return {
     events,
     selectedDate,
+    isPopoverOpen,
+    popoverData, // Includes position now
+    requestOpenPopover,
+    saveFromPopover,
+    closePopover,
     isModalOpen,
-    editingEvent,
-    requestCreateEvent,
+    modalEventData,
+    requestOpenFullModal,
     requestEditEvent,
-    saveEvent,
-    deleteEvent,
+    saveFromModal,
     closeModal,
+    deleteEvent,
     handleDateChange,
   };
 }

@@ -4,31 +4,56 @@
 import { useState, useEffect } from "react";
 import { Navbar } from "../navBar";
 import { GoalsKanbanView } from "./kanbanBoard/goalsKanBan";
-import CalendarView from "./calendar/calendarView";
+import CalendarView, { type CalendarEvent } from "./calendar/calendarView";
 import { KanbanSlider, SliderDirection } from "./kanbanBoard/kanbanSlider";
 import { MiniCalendar } from "./calendar/miniMonthCalendar";
 import { cn } from "~/lib/utils";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "~/components/ui/button";
-import { useCalendarEvents } from "./calendar/useCalendarEvents"; 
+import { useCalendarEvents } from "./calendar/useCalendarEvents";
 import { EventEditModal } from "./calendar/eventModal";
+import { EventQuickAddPopover } from "./calendar/eventQuickAddPopover";
+import { COLORS } from "~/components/colorPicker";
 
+const initialCalendarEvents: CalendarEvent[] | undefined = [
+  {
+    id: "1",
+    title: "Team Meeting",
+    start: new Date(2025, 3, 24, 10, 0),
+    end: new Date(2025, 3, 24, 11, 0),
+    goalColor: "blue",
+    description: "",
+  },
+  {
+    id: "2",
+    title: "Code Review",
+    start: new Date(2025, 3, 25, 14, 0),
+    end: new Date(2025, 3, 25, 15, 30),
+    taskColor: "blue",
+    description: "Review PR #123",
+  },
+];
+
+// Use the hook to manage calendar state and logic
 export default function GoalsPage() {
-  // Use the hook to manage calendar state and logic
   const {
     events,
     selectedDate,
+    isPopoverOpen,
+    popoverData, // Includes position: {x, y}
+    requestOpenPopover,
+    saveFromPopover,
+    closePopover,
     isModalOpen,
-    editingEvent,
-    requestCreateEvent, 
-    requestEditEvent, 
-    saveEvent,  
-    deleteEvent, 
-    closeModal,  
+    modalEventData,
+    requestOpenFullModal,
+    requestEditEvent,
+    saveFromModal,
+    closeModal,
+    deleteEvent,
     handleDateChange,
-  } = useCalendarEvents([
-    /* Initial events if any */
-  ]);
+    // Destructure other Kanban/Goal state/handlers if they exist in the hook
+  } = useCalendarEvents(initialCalendarEvents);
 
   const [isKanbanCollapsed, setIsKanbanCollapsed] = useState(false);
   const [isCalendarCollapsed, setIsCalendarCollapsed] = useState(false);
@@ -81,15 +106,15 @@ export default function GoalsPage() {
             {/* Mini Calendar Section */}
             <div
               className={cn(
-                "transition-[max-height,padding] duration-300 ease-in-out overflow-hidden",
+                "overflow-hidden transition-[max-height,padding] duration-300 ease-in-out",
                 isMiniCalendarVisible
-                  ? "max-h-[200px] p-2" // Adjust max-h 
-                  : "max-h-0 p-0 pt-2"
+                  ? "max-h-[200px] p-2" // Adjust max-h
+                  : "max-h-0 p-0 pt-2",
               )}
             >
               <MiniCalendar
                 selectedDate={selectedDate}
-                onDateChange={handleDateChange} 
+                onDateChange={handleDateChange}
               />
             </div>
 
@@ -127,23 +152,34 @@ export default function GoalsPage() {
           <div className="flex-1 overflow-hidden">
             <CalendarView
               events={events}
-              currentDate={selectedDate} 
-              onCreate={requestCreateEvent}
+              currentDate={selectedDate}
+              onOpenPopover={requestOpenPopover} // Now expects position
               onEdit={requestEditEvent}
               onDelete={deleteEvent}
-              weekStartsOn={0} // 0 for Sunday, 1 for Monday
             />
           </div>
         )}
       </main>
 
       {/* Event Edit Modal */}
+      {popoverData && (
+        <EventQuickAddPopover
+          isOpen={isPopoverOpen}
+          onOpenChange={(open) => !open && closePopover()}
+          initialData={popoverData} // Contains start/end passed from the hook
+          onSave={saveFromPopover} // Hook's handler for saving from popover
+          onOpenFullModal={requestOpenFullModal} // Hook's handler to escalate to modal
+          // Pass anchor info here if you implement positioning
+        />
+      )}
+
+      {/* Render the Modal - Controlled by state */}
       <EventEditModal
         isOpen={isModalOpen}
-        eventData={editingEvent}
+        eventData={modalEventData} // Contains full event or data from popover
         onClose={closeModal}
-        onSave={saveEvent}
-        onDelete={deleteEvent} 
+        onSave={saveFromModal} // Hook's handler for saving from modal
+        onDelete={deleteEvent} // Pass delete handler
       />
     </div>
   );
