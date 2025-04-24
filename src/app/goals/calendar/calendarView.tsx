@@ -122,20 +122,17 @@ export default function CalendarView({
         <div
           key={evt.id}
           className={cn(
-            "absolute inset-0 z-10 cursor-pointer overflow-hidden rounded border p-1 text-xs text-white shadow", // Added cursor-pointer
+            "relative z-10 cursor-pointer overflow-hidden rounded border p-1 text-xs text-white shadow",
             colorClasses,
           )}
           style={{
             gridColumnStart,
+            gridColumnEnd: gridColumnStart + 1, // <-- force one day
             gridRowStart,
             gridRowEnd,
-            marginTop: "1px",
-            marginLeft: "1px",
-            marginRight: "1px",
-            marginBottom: "1px",
           }}
           onClick={(e) => {
-            e.stopPropagation(); // Prevent grid click handlers
+            e.stopPropagation();
             onEdit(evt);
           }}
           title={`${evt.title}\n${evt.start.toLocaleTimeString([], {
@@ -320,8 +317,11 @@ export default function CalendarView({
               return (
                 <div
                   key={h}
-                  className="absolute right-0 mt-[-8px] mr-1 text-right text-xs text-gray-500"
-                  style={{ top: `${topPercent}%`, right: "4px" }}
+                  className="absolute my-3 w-full pr-1 text-right text-xs text-gray-500" // Use padding for spacing from edge
+                  style={{
+                    top: `${topPercent}%`,
+                    transform: "translateY(-50%)",
+                  }} // Center vertically
                 >
                   {h === 0 ? "" : h % 12 === 0 ? "12" : h % 12}
                   {h !== 0 && h < 12 ? " AM" : ""}
@@ -372,27 +372,25 @@ export default function CalendarView({
           {/* Render Existing Events */}
           {events.map(renderEvent)}
 
-          {/* Render Drag Selection Preview (Optional but good UX) */}
-          {isDragging &&
-            dragStartDate &&
-            dragEndDate &&
-            dragStartDate < dragEndDate && (
-              <div
-                className="pointer-events-none absolute z-5 border border-blue-400 bg-blue-200/50" // Preview style
-                style={{
-                  gridColumnStart:
-                    weekDays.findIndex(
-                      (d) => d.toDateString() === dragStartDate.toDateString(),
-                    ) + 1,
-                  gridRowStart: getStartRow(dragStartDate),
-                  gridRowEnd: getEndRow(dragEndDate), // Use end row for height
-                  marginTop: "1px",
-                  marginLeft: "1px",
-                  marginRight: "1px",
-                  marginBottom: "1px",
-                }}
-              />
-            )}
+          {isDragging && dragStartDate && dragEndDate && (
+            <div
+              className="pointer-events-none absolute z-5 rounded border border-blue-400 bg-blue-200/50"
+              style={{
+                gridColumnStart:
+                  weekDays.findIndex(
+                    (d) => d.toDateString() === dragStartDate.toDateString(),
+                  ) + 1,
+                gridColumnEnd:
+                  weekDays.findIndex(
+                    (d) => d.toDateString() === dragStartDate.toDateString(),
+                  ) +
+                  1 +
+                  1,
+                gridRowStart: getStartRow(dragStartDate),
+                gridRowEnd: getEndRow(dragEndDate),
+              }}
+            />
+          )}
 
           {/* "Now" Indicator Line */}
           {nowIndicatorVisible && (

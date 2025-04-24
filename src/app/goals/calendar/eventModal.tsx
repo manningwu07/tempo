@@ -20,9 +20,7 @@ type EventEditModalProps = {
   // Can be a full event for editing, or partial {start, end} for creation
   eventData: Partial<CalendarEvent> | { start: Date; end: Date } | null;
   onClose: () => void;
-  onSave: (
-    eventData: Omit<CalendarEvent, "id"> & { id?: string }
-  ) => void;
+  onSave: (eventData: Omit<CalendarEvent, "id"> & { id?: string }) => void;
   onDelete?: (id: string) => void; // Optional delete handler
 };
 
@@ -44,7 +42,7 @@ export function EventEditModal({
   useEffect(() => {
     if (eventData) {
       setTitle((eventData as Partial<CalendarEvent>).title ?? "New Event");
-      setDescription((eventData as Partial<CalendarEvent>).description ??  "");
+      setDescription((eventData as Partial<CalendarEvent>).description ?? "");
       setStartDate(eventData.start ? new Date(eventData.start) : null);
       setEndDate(eventData.end ? new Date(eventData.end) : null);
       // Reset other fields based on eventData
@@ -120,26 +118,20 @@ export function EventEditModal({
           {/* Date/Time Pickers - VERY basic example, replace with robust pickers */}
           <div className="col-span-3 grid grid-cols-2 gap-2">
             <Input
-              type="datetime-local" // Basic, consider Shadcn DatePicker + TimeInput
-              value={
-                startDate
-                  ? startDate.toISOString().substring(0, 16)
-                  : ""
-              }
-              onChange={(e) =>
-                setStartDate(e.target.value ? new Date(e.target.value) : null)
-              }
+              type="datetime-local"
+              value={startDate ? toDatetimeLocal(startDate) : ""}
+              onChange={(e) => {
+                const v = e.currentTarget.value;
+                setStartDate(v ? new Date(v) : null);
+              }}
             />
             <Input
-              type="datetime-local" // Basic, consider Shadcn DatePicker + TimeInput
-               value={
-                endDate
-                  ? endDate.toISOString().substring(0, 16)
-                  : ""
-              }
-              onChange={(e) =>
-                setEndDate(e.target.value ? new Date(e.target.value) : null)
-              }
+              type="datetime-local"
+              value={endDate ? toDatetimeLocal(endDate) : ""}
+              onChange={(e) => {
+                const v = e.currentTarget.value;
+                setEndDate(v ? new Date(v) : null);
+              }}
             />
           </div>
 
@@ -163,4 +155,14 @@ export function EventEditModal({
       </DialogContent>
     </Dialog>
   );
+}
+
+function toDatetimeLocal(d: Date) {
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  const yyyy = d.getFullYear();
+  const MM = pad(d.getMonth() + 1);
+  const dd = pad(d.getDate());
+  const hh = pad(d.getHours());
+  const mm = pad(d.getMinutes());
+  return `${yyyy}-${MM}-${dd}T${hh}:${mm}`;
 }
